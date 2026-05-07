@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: abdil-taxi-backend
+    runtime: docker
+    repo: https://github.com/VOTRE_USERNAME/abdil-taxi-backend
+    plan: free
+    envVars:
+      - key: SPRING_DATASOURCE_URL
+        value: jdbc:mysql://${DATABASE_HOST}:3306/abdiltaxi?useSSL=false&serverTimezone=UTC
+      - key: SPRING_DATASOURCE_USERNAME
+        value: ${DATABASE_USER}
+      - key: SPRING_DATASOURCE_PASSWORD
+        value: ${DATABASE_PASSWORD}

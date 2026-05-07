@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Abdil Taxi - Suivi en temps réel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        #map {
+            height: 500px;
+            width: 100%;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        .driver-card {
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 10px;
+        }
+        .driver-card:hover {
+            transform: translateX(5px);
+            background-color: #f8f9fa;
+        }
+        .driver-online {
+            border-left: 4px solid #4CAF50;
+        }
+        .driver-offline {
+            border-left: 4px solid #9E9E9E;
+            opacity: 0.6;
+        }
+        .driver-busy {
+            border-left: 4px solid #FF9800;
+        }
+        .refresh-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .sidebar {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            z-index: 100;
+            padding: 48px 0 0;
+            box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+            background: linear-gradient(135deg, #FF6F00, #FF9800);
+            min-height: 100vh;
+        }
+        .sidebar .nav-link {
+            font-weight: 500;
+            color: #fff;
+            padding: 12px 20px;
+            margin: 4px 0;
+            border-radius: 8px;
+        }
+        .sidebar .nav-link:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        .sidebar .nav-link.active {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+        .sidebar .nav-link i {
+            margin-right: 10px;
+        }
+        .main-content {
+            margin-left: 260px;
+            padding: 20px;
+        }
+        .status-online { background-color: #4CAF50; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; }
+        .status-offline { background-color: #9E9E9E; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; }
+        .status-busy { background-color: #FF9800; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar -->
+        <nav class="col-md-3 col-lg-2 d-md-block sidebar">
+            <div class="position-sticky pt-3">
+                <div class="text-center mb-4">
+                    <i class="fas fa-taxi fa-3x text-white"></i>
+                    <h5 class="text-white mt-2">Abdil Taxi Admin</h5>
+                </div>
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html">
+                            <i class="fas fa-tachometer-alt"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html" data-page="clients">
+                            <i class="fas fa-users"></i> Clients
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html" data-page="drivers">
+                            <i class="fas fa-id-card"></i> Chauffeurs
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html" data-page="rides">
+                            <i class="fas fa-history"></i> Courses
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#">
+                            <i class="fas fa-map-marker-alt"></i> Suivi GPS
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Main content -->
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                <h1 class="h2">📍 Suivi en temps réel</h1>
+                <div class="btn-toolbar mb-2 mb-md-0">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="refreshMap()">
+                        <i class="fas fa-sync-alt"></i> Actualiser
+                    </button>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <i class="fas fa-taxi"></i> Chauffeurs en ligne
+                        </div>
+                        <div class="card-body" id="driversList" style="max-height: 500px; overflow-y: auto;">
+                            <div class="text-center">Chargement...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header bg-success text-white">
+                            <i class="fas fa-map"></i> Carte des chauffeurs
+                        </div>
+                        <div class="card-body">
+                            <div id="map" style="height: 500px; background-color: #e9ecef; display: flex; align-items: center; justify-content: center;">
+                                <div class="text-center">
+                                    <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+                                    <p class="mt-2">Chargement de la carte...</p>
+                                </div>
+                            </div>
+                            <div id="legend" class="mt-2">
+                                <span class="status-online">● En ligne</span>
+                                <span class="status-busy">● En course</span>
+                                <span class="status-offline">● Hors ligne</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<button class="btn btn-primary refresh-btn" onclick="refreshMap()">
+    <i class="fas fa-sync-alt"></i> Rafraîchir
+</button>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    let map;
+    let markers = [];
+    let refreshInterval;
+
+    const API_BASE_URL = 'http://192.168.11.101:8080/api/admin';
+
+    // Initialiser la carte manuellement avec une clé valide
+    function initMap() {
+        map = new google.maps.Map(document.getElementById('map'), {
+            center: { lat: 33.5731, lng: -7.5898 },
+            zoom: 12
+        });
+        loadDrivers();
+        startAutoRefresh();
+    }
+
+    // Fallback si Google Maps ne charge pas
+    function loadMapFallback() {
+        const mapDiv = document.getElementById('map');
+        mapDiv.innerHTML = `
+            <div style="height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+                <i class="fas fa-map-marked-alt fa-4x text-muted"></i>
+                <p class="mt-3">Carte non disponible</p>
+                <p class="text-muted small">Vérifiez votre connexion internet et la clé API</p>
+                <button class="btn btn-sm btn-primary" onclick="location.reload()">Réessayer</button>
+            </div>
+        `;
+    }
+
+    // Charger les chauffeurs
+    async function loadDrivers() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/drivers`);
+            const drivers = await response.json();
+            updateDriversList(drivers);
+            if (map) updateMap(drivers);
+        } catch (error) {
+            console.error('Erreur:', error);
+            document.getElementById('driversList').innerHTML = '<div class="text-center text-danger">Erreur de chargement</div>';
+        }
+    }
+
+    function updateDriversList(drivers) {
+        const driversList = document.getElementById('driversList');
+
+        if (!drivers || drivers.length === 0) {
+            driversList.innerHTML = '<div class="text-center">Aucun chauffeur enregistré</div>';
+            return;
+        }
+
+        driversList.innerHTML = drivers.map(driver => {
+            let statusClass = '';
+            let statusText = '';
+            if (driver.status === 'ONLINE') {
+                statusClass = 'status-online';
+                statusText = 'En ligne';
+            } else if (driver.status === 'ON_TRIP') {
+                statusClass = 'status-busy';
+                statusText = 'En course';
+            } else {
+                statusClass = 'status-offline';
+                statusText = 'Hors ligne';
+            }
+
+            return `
+                <div class="driver-card card mb-2 driver-${driver.status.toLowerCase()}" onclick="centerOnDriver(${driver.latitude || 33.5731}, ${driver.longitude || -7.5898})">
+                    <div class="card-body p-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong><i class="fas fa-user"></i> ${driver.fullName}</strong><br>
+                                <small><i class="fas fa-car"></i> ${driver.vehicleType} - ${driver.licensePlate}</small><br>
+                                <small><i class="fas fa-phone"></i> ${driver.phone}</small>
+                            </div>
+                            <div>
+                                <span class="${statusClass}">${statusText}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function updateMap(drivers) {
+        // Supprimer les anciens marqueurs
+        markers.forEach(marker => marker.setMap(null));
+        markers = [];
+
+        drivers.forEach(driver => {
+            if (driver.latitude && driver.longitude && driver.latitude !== 0 && driver.longitude !== 0) {
+                let iconColor = 'green';
+                if (driver.status === 'ON_TRIP') iconColor = 'orange';
+                if (driver.status === 'OFFLINE') iconColor = 'gray';
+
+                const marker = new google.maps.Marker({
+                    position: { lat: driver.latitude, lng: driver.longitude },
+                    map: map,
+                    title: driver.fullName,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        fillColor: iconColor,
+                        fillOpacity: 0.8,
+                        scale: 10,
+                        strokeColor: 'white',
+                        strokeWeight: 2
+                    }
+                });
+
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `
+                        <div style="font-family: Arial, sans-serif;">
+                            <strong>${driver.fullName}</strong><br>
+                            <i class="fas fa-car"></i> ${driver.vehicleType}<br>
+                            <i class="fas fa-tag"></i> ${driver.licensePlate}<br>
+                            <i class="fas fa-phone"></i> ${driver.phone}<br>
+                            <span class="${driver.status === 'ONLINE' ? 'status-online' : driver.status === 'ON_TRIP' ? 'status-busy' : 'status-offline'}">${driver.status === 'ONLINE' ? 'En ligne' : driver.status === 'ON_TRIP' ? 'En course' : 'Hors ligne'}</span>
+                        </div>
+                    `
+                });
+
+                marker.addListener('click', () => {
+                    infoWindow.open(map, marker);
+                });
+
+                markers.push(marker);
+            }
+        });
+    }
+
+    function centerOnDriver(lat, lng) {
+        if (map) {
+            map.setCenter({ lat: lat, lng: lng });
+            map.setZoom(15);
+        }
+    }
+
+    function startAutoRefresh() {
+        if (refreshInterval) clearInterval(refreshInterval);
+        refreshInterval = setInterval(() => {
+            loadDrivers();
+        }, 10000);
+    }
+
+    function refreshMap() {
+        loadDrivers();
+    }
+
+    // Charger la carte
+    function loadGoogleMaps() {
+        const script = document.createElement('script');
+        script.src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyBGQpwKbIlJxv0z8Irqupvf2BRDVxTNrc4&callback=initMap';
+        script.async = true;
+        script.defer = true;
+        script.onerror = loadMapFallback;
+        document.head.appendChild(script);
+    }
+
+    loadGoogleMaps();
+</script>
+</body>
+</html>
