@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: abdil-taxi-backend
-    runtime: image
-    repo: https://github.com/Medhamz/abdil-taxi-backend
-    plan: free
-    envVars:
-      - key: JAVA_OPTS
-        value: -Xmx256m
