@@ -11,6 +11,17 @@ public class RideResponse {
     private String status;
     private String createdAt;
 
+    // ✅ CHAMPS POUR LE CHAUFFEUR
+    private Long driverId;
+    private String driverName;
+
+    // ✅ CHAMPS POUR LA PAUSE
+    private Boolean driverIsOnPause;
+    private String driverPauseReason;
+
+    // ✅ CHAMP POUR LE MODE DE PAIEMENT (TRÈS IMPORTANT)
+    private String paymentMethod;
+
     public RideResponse() {}
 
     public RideResponse(Long id, String clientName, String clientPhone, String pickupAddress,
@@ -27,6 +38,7 @@ public class RideResponse {
         this.createdAt = createdAt;
     }
 
+    // Getters et Setters existants
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -53,4 +65,22 @@ public class RideResponse {
 
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
+
+    // ✅ GETTERS ET SETTERS POUR LE CHAUFFEUR
+    public Long getDriverId() { return driverId; }
+    public void setDriverId(Long driverId) { this.driverId = driverId; }
+
+    public String getDriverName() { return driverName; }
+    public void setDriverName(String driverName) { this.driverName = driverName; }
+
+    // ✅ GETTERS ET SETTERS POUR LA PAUSE
+    public Boolean getDriverIsOnPause() { return driverIsOnPause; }
+    public void setDriverIsOnPause(Boolean driverIsOnPause) { this.driverIsOnPause = driverIsOnPause; }
+
+    public String getDriverPauseReason() { return driverPauseReason; }
+    public void setDriverPauseReason(String driverPauseReason) { this.driverPauseReason = driverPauseReason; }
+
+    // ✅ GETTER ET SETTER POUR LE MODE DE PAIEMENT
+    public String getPaymentMethod() { return paymentMethod; }
+    public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
 }

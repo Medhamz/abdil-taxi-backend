@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Abdil Taxi - Gestion des coupons</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0f142e 100%);
+            min-height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            z-index: 100;
+            padding: 0;
+            background: linear-gradient(180deg, #0b0f2a 0%, #0d122b 50%, #070b22 100%);
+            min-height: 100vh;
+            transition: all 0.3s;
+            border-right: 1px solid rgba(0, 255, 255, 0.1);
+            width: 280px;
+        }
+
+        .sidebar .sidebar-header {
+            padding: 30px 20px;
+            text-align: center;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+            margin-bottom: 20px;
+        }
+
+        .sidebar .sidebar-header i {
+            font-size: 55px;
+            background: linear-gradient(135deg, #00d4ff, #ffd700, #9c27b0);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 12px;
+        }
+
+        .sidebar .sidebar-header h5 {
+            color: #fff;
+            margin: 0;
+            font-weight: 700;
+        }
+
+        .sidebar .nav-link {
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.7);
+            padding: 12px 20px;
+            margin: 6px 16px;
+            border-radius: 12px;
+            transition: all 0.3s;
+        }
+
+        .sidebar .nav-link:hover {
+            background: rgba(0, 212, 255, 0.15);
+            color: white;
+            transform: translateX(5px);
+        }
+
+        .sidebar .nav-link.active {
+            background: linear-gradient(135deg, #00b4d4, #ffd700);
+            color: #0a0e27;
+        }
+
+        .sidebar .nav-link i {
+            margin-right: 12px;
+            width: 24px;
+        }
+
+        /* Main content */
+        .main-content {
+            margin-left: 280px;
+            padding: 25px 35px;
+            min-height: 100vh;
+        }
+
+        .content-header {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border-radius: 28px;
+            padding: 20px 30px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(0, 212, 255, 0.2);
+        }
+
+        .content-header h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff, #00d4ff, #ffd700);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin: 0;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            border: 1px solid rgba(0, 212, 255, 0.15);
+            margin-bottom: 24px;
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, #00b4d4, #ffd700);
+            color: #0a0e27;
+            padding: 16px 20px;
+            border: none;
+            font-weight: 700;
+        }
+
+        .card-body {
+            padding: 24px;
+        }
+
+        .form-control, .form-select {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            color: white;
+            border-radius: 12px;
+            padding: 10px 16px;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: #00d4ff;
+            box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.15);
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+        }
+
+        .form-label {
+            color: rgba(255, 255, 255, 0.8);
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #00b4d4, #ffd700);
+            border: none;
+            color: #0a0e27;
+            font-weight: 600;
+            padding: 10px 24px;
+            border-radius: 40px;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 180, 212, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            color: white;
+        }
+
+        table {
+            color: #fff;
+        }
+
+        table thead th {
+            background: rgba(0, 212, 255, 0.15);
+            border-bottom: 1px solid rgba(0, 212, 255, 0.3);
+            padding: 12px;
+        }
+
+        table tbody td {
+            padding: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            vertical-align: middle;
+        }
+
+        .badge-active {
+            background: linear-gradient(135deg, #4caf50, #2e7d32);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+
+        .badge-used {
+            background: linear-gradient(135deg, #f44336, #c62828);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+
+        .badge-expired {
+            background: linear-gradient(135deg, #ff9800, #e65100);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+
+        .code-text {
+            font-family: monospace;
+            font-size: 16px;
+            font-weight: bold;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 4px 8px;
+            border-radius: 8px;
+            letter-spacing: 1px;
+        }
+
+        .copy-btn {
+            background: rgba(0, 212, 255, 0.2);
+            border: none;
+            color: #00d4ff;
+            padding: 4px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .copy-btn:hover {
+            background: rgba(0, 212, 255, 0.4);
+        }
+
+        .stats-card {
+            background: rgba(0, 212, 255, 0.1);
+            border-radius: 16px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stats-card .number {
+            font-size: 28px;
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .stats-card .label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                position: fixed;
+                z-index: 1000;
+            }
+            .main-content {
+                margin-left: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container-fluid p-0">
+    <div class="row g-0">
+        <!-- Sidebar -->
+        <nav class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <i class="fas fa-taxi"></i>
+                <h5>Abdil Taxi Admin</h5>
+                <small class="text-white-50">Premium</small>
+            </div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link" href="index.html" data-page="dashboard">
+                        <i class="fas fa-tachometer-alt"></i> Dashboard
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="index.html" data-page="clients">
+                        <i class="fas fa-users"></i> Clients
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="index.html" data-page="drivers">
+                        <i class="fas fa-id-card"></i> Chauffeurs
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="index.html" data-page="rides">
+                        <i class="fas fa-history"></i> Courses
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="coupons.html" style="background: linear-gradient(135deg, #00b4d4, #ffd700); color: #0a0e27;">
+                        <i class="fas fa-ticket-alt"></i> Coupons
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="index.html" data-page="campaigns">
+                        <i class="fas fa-bullhorn"></i> Campagnes
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main content -->
+        <main class="main-content" id="mainContent">
+            <div class="content-header">
+                <h1><i class="fas fa-ticket-alt"></i> Gestion des coupons</h1>
+            </div>
+
+            <!-- Formulaire de génération -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-plus-circle"></i> Générer des coupons
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Nombre de coupons</label>
+                            <input type="number" class="form-control" id="couponCount" value="5" min="1" max="100">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Montant (FCFA)</label>
+                            <input type="number" class="form-control" id="couponAmount" value="1000" min="100" step="100">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Validité (jours)</label>
+                            <input type="number" class="form-control" id="couponValidity" value="30" min="1" max="365">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Créé par</label>
+                            <input type="text" class="form-control" id="couponCreatedBy" value="admin">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="generateCoupons()">
+                        <i class="fas fa-magic"></i> Générer les coupons
+                    </button>
+                </div>
+            </div>
+
+            <!-- Statistiques -->
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="stats-card">
+                        <div class="number" id="statActive">0</div>
+                        <div class="label">Coupons actifs</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stats-card">
+                        <div class="number" id="statUsed">0</div>
+                        <div class="label">Coupons utilisés</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stats-card">
+                        <div class="number" id="statTotalAmount">0</div>
+                        <div class="label">Montant total (FCFA)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Liste des coupons -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-list"></i> Liste des coupons
+                    <button class="btn btn-sm btn-secondary float-end" onclick="loadCoupons()" style="background: rgba(0,212,255,0.2); color: #00d4ff;">
+                        <i class="fas fa-sync-alt"></i> Actualiser
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table" id="couponsTable">
+                            <thead>
+                            <tr>
+                                <th>Code</th>
+                                <th>Montant</th>
+                                <th>Statut</th>
+                                <th>Créé par</th>
+                                <th>Date création</th>
+                                <th>Expiration</th>
+                                <th>Utilisé par</th>
+                                <th>Action</th>
+                            </tr>
+                            </thead>
+                            <tbody id="couponsTableBody">
+                            <tr><td colspan="8" style="text-align: center;">Chargement...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+    const API_BASE = 'http://localhost:8080/api/wallet';;
+
+    async function generateCoupons() {
+        const count = document.getElementById('couponCount').value;
+        const amount = document.getElementById('couponAmount').value;
+        const validityDays = document.getElementById('couponValidity').value;
+        const createdBy = document.getElementById('couponCreatedBy').value;
+
+        if (count <= 0 || amount <= 0) {
+            alert('Veuillez remplir tous les champs');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/coupons/generate?count=${count}&amount=${amount}&createdBy=${createdBy}&validityDays=${validityDays}`, {
+                method: 'POST'
+            });
+            const coupons = await response.json();
+
+            let message = `✅ ${coupons.length} coupons générés !\n\n`;
+            coupons.forEach(c => {
+                message += `🎫 ${c.code} - ${c.amount} FCFA\n`;
+            });
+
+            alert(message);
+            loadCoupons();
+        } catch (error) {
+            alert('Erreur: ' + error.message);
+        }
+    }
+
+    async function loadCoupons() {
+        try {
+            const response = await fetch(`${API_BASE}/coupons/all`);
+            const coupons = await response.json();
+
+            const tbody = document.getElementById('couponsTableBody');
+
+            if (coupons.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">Aucun coupon</td></tr>';
+                updateStats([]);
+                return;
+            }
+
+            tbody.innerHTML = coupons.map(coupon => {
+                let statusBadge = '';
+                if (coupon.status === 'ACTIVE') {
+                    statusBadge = '<span class="badge-active">✅ Actif</span>';
+                } else if (coupon.status === 'USED') {
+                    statusBadge = '<span class="badge-used">🔴 Utilisé</span>';
+                } else {
+                    statusBadge = '<span class="badge-expired">⏰ Expiré</span>';
+                }
+
+                return `
+                    <tr>
+                        <td><span class="code-text">${coupon.code}</span></td>
+                        <td><strong>${coupon.amount} FCFA</strong></td>
+                        <td>${statusBadge}</td>
+                        <td>${coupon.createdBy || '-'}</td>
+                        <td>${coupon.createdAt ? new Date(coupon.createdAt).toLocaleDateString() : '-'}</td>
+                        <td>${coupon.expiresAt ? new Date(coupon.expiresAt).toLocaleDateString() : '-'}</td>
+                        <td>${coupon.usedByUserId ? 'Client #' + coupon.usedByUserId : '-'}</td>
+                        <td>
+                            <button class="copy-btn" onclick="copyCode('${coupon.code}')">
+                                <i class="fas fa-copy"></i> Copier
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            updateStats(coupons);
+        } catch (error) {
+            console.error('Erreur:', error);
+            document.getElementById('couponsTableBody').innerHTML = '<tr><td colspan="8" style="text-align: center; color: red;">Erreur de chargement</td></tr>';
+        }
+    }
+
+    function updateStats(coupons) {
+        const active = coupons.filter(c => c.status === 'ACTIVE').length;
+        const used = coupons.filter(c => c.status === 'USED').length;
+        const totalAmount = coupons.filter(c => c.status === 'ACTIVE').reduce((sum, c) => sum + c.amount, 0);
+
+        document.getElementById('statActive').innerText = active;
+        document.getElementById('statUsed').innerText = used;
+        document.getElementById('statTotalAmount').innerText = totalAmount.toFixed(0);
+    }
+
+    function copyCode(code) {
+        navigator.clipboard.writeText(code);
+        alert('Code copié : ' + code);
+    }
+
+    // Charger au démarrage
+    loadCoupons();
+
+    // Rafraîchir toutes les 15 secondes
+    setInterval(loadCoupons, 15000);
+</script>
+</body>
+</html>

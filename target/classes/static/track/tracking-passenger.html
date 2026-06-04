@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Abdil Taxi - Suivi en direct</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #F3F4F6;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            color: white;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .back-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        #map {
+            height: 55vh;
+            width: 100%;
+        }
+
+        .info-panel {
+            background: white;
+            margin: -20px 16px 0;
+            border-radius: 24px;
+            padding: 20px;
+            position: relative;
+            z-index: 2;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            background: #E8F5E9;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #4CAF50;
+            margin-bottom: 16px;
+        }
+
+        .location-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid #F0F0F0;
+        }
+
+        .location-icon {
+            width: 40px;
+            height: 40px;
+            background: #F3F4F6;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .location-details {
+            flex: 1;
+        }
+
+        .location-label {
+            font-size: 12px;
+            color: #9CA3AF;
+            margin-bottom: 2px;
+        }
+
+        .location-address {
+            font-size: 14px;
+            font-weight: 500;
+            color: #1F2937;
+        }
+
+        .eta-info {
+            background: #F3F4F6;
+            border-radius: 16px;
+            padding: 16px;
+            margin-top: 16px;
+            display: flex;
+            justify-content: space-around;
+            text-align: center;
+        }
+
+        .eta-item {
+            flex: 1;
+        }
+
+        .eta-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #667EEA;
+        }
+
+        .eta-label {
+            font-size: 11px;
+            color: #9CA3AF;
+            margin-top: 4px;
+        }
+
+        .last-update {
+            text-align: center;
+            margin-top: 12px;
+            font-size: 11px;
+            color: #9CA3AF;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 16px;
+            font-size: 11px;
+            color: #9CA3AF;
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1><span>🚖</span> Abdil Taxi - Suivi</h1>
+    <button class="back-btn" onclick="goBack()">← Retour</button>
+</div>
+
+<div id="map"></div>
+
+<div class="info-panel">
+    <div class="status-badge" id="statusBadge">
+        <span>🟢</span> Chargement...
+    </div>
+
+    <div class="location-item">
+        <div class="location-icon">📍</div>
+        <div class="location-details">
+            <div class="location-label">Position actuelle</div>
+            <div class="location-address" id="currentAddress">Chargement...</div>
+        </div>
+    </div>
+
+    <div class="eta-info">
+        <div class="eta-item">
+            <div class="eta-value" id="distance">--</div>
+            <div class="eta-label">Distance</div>
+        </div>
+        <div class="eta-item">
+            <div class="eta-value" id="duration">--</div>
+            <div class="eta-label">Temps</div>
+        </div>
+        <div class="eta-item">
+            <div class="eta-value" id="speed">--</div>
+            <div class="eta-label">Vitesse</div>
+        </div>
+    </div>
+
+    <div class="last-update" id="lastUpdate">Dernière mise à jour: --</div>
+</div>
+
+<div class="footer">Abdil Taxi - Sécurité et transparence</div>
+
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBGQpwKbIlJxv0z8Irqupvf2BRDVxTNrc4"></script>
+<script>
+    let map;
+    let marker;
+    let pathPolyline;
+    let lastPosition = null;
+    let totalDistance = 0;
+    let startTime = null;
+    let updateInterval;
+    let routePoints = [];
+    let currentShareCode = null;
+
+    function getShareCodeFromUrl() {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('code');
+    }
+
+    function initMap() {
+        map = new google.maps.Map(document.getElementById('map'), {
+            center: { lat: 33.5731, lng: -7.5898 },
+            zoom: 13,
+            zoomControl: true,
+            mapTypeControl: false,
+            streetViewControl: false
+        });
+
+        marker = new google.maps.Marker({
+            map: map,
+            icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                fillColor: '#667EEA',
+                fillOpacity: 1,
+                scale: 10,
+                strokeColor: 'white',
+                strokeWeight: 2
+            },
+            animation: google.maps.Animation.DROP
+        });
+
+        startTracking();
+    }
+
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
+
+    async function getAddress(lat, lng) {
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`);
+            const data = await response.json();
+            if (data.display_name) {
+                const parts = data.display_name.split(',');
+                document.getElementById('currentAddress').innerHTML = parts[0] + ', ' + parts[1];
+            } else {
+                document.getElementById('currentAddress').innerHTML = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            }
+        } catch (error) {
+            document.getElementById('currentAddress').innerHTML = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        }
+    }
+
+    function updateMap(lat, lng) {
+        const position = { lat: parseFloat(lat), lng: parseFloat(lng) };
+        map.setCenter(position);
+        map.setZoom(15);
+        marker.setPosition(position);
+
+        routePoints.push(position);
+        if (pathPolyline) pathPolyline.setMap(null);
+        pathPolyline = new google.maps.Polyline({
+            path: routePoints,
+            geodesic: true,
+            strokeColor: '#667EEA',
+            strokeOpacity: 0.8,
+            strokeWeight: 4
+        });
+        pathPolyline.setMap(map);
+
+        if (lastPosition) {
+            totalDistance += calculateDistance(lastPosition.lat, lastPosition.lng, lat, lng);
+            document.getElementById('distance').innerHTML = totalDistance.toFixed(1) + ' km';
+        }
+        lastPosition = position;
+        getAddress(lat, lng);
+
+        if (startTime) {
+            const elapsed = (Date.now() - startTime) / 1000;
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = Math.floor(elapsed % 60);
+            document.getElementById('duration').innerHTML = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            if (totalDistance > 0 && elapsed > 0) {
+                const avgSpeed = (totalDistance / (elapsed / 3600)).toFixed(1);
+                document.getElementById('speed').innerHTML = avgSpeed + ' km/h';
+            }
+        }
+    }
+
+    async function updateLocation() {
+        try {
+            const response = await fetch(`/api/live/position/${currentShareCode}`);
+            if (!response.ok) {
+                if (response.status === 404) stopTracking('Course terminée');
+                return;
+            }
+            const data = await response.json();
+            if (data.lat && data.lng) {
+                updateMap(data.lat, data.lng);
+                document.getElementById('statusBadge').innerHTML = '<span>🟢</span> En direct';
+                document.getElementById('lastUpdate').innerHTML = `Dernière mise à jour: ${new Date().toLocaleTimeString()}`;
+            }
+        } catch (error) {
+            console.error('Erreur:', error);
+        }
+    }
+
+    function startTracking() {
+        currentShareCode = getShareCodeFromUrl();
+        if (!currentShareCode) {
+            window.location.href = '/track/index.html';
+            return;
+        }
+        startTime = Date.now();
+        updateLocation();
+        updateInterval = setInterval(updateLocation, 3000);
+    }
+
+    function stopTracking(message) {
+        if (updateInterval) clearInterval(updateInterval);
+        if (message) {
+            document.getElementById('statusBadge').innerHTML = `<span>🔴</span> ${message}`;
+        }
+    }
+
+    function goBack() {
+        if (updateInterval) clearInterval(updateInterval);
+        window.location.href = '/track/index.html';
+    }
+
+    window.onload = function() {
+        if (typeof google !== 'undefined') initMap();
+        else window.initMap = initMap;
+    };
+
+    window.onbeforeunload = function() {
+        if (updateInterval) clearInterval(updateInterval);
+    };
+</script>
+</body>
+</html>

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Abdil Taxi - Suivi de course</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 450px;
+            width: 100%;
+        }
+
+        .card {
+            background: white;
+            border-radius: 32px;
+            padding: 40px 32px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            text-align: center;
+        }
+
+        .logo {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+        }
+
+        .logo span {
+            font-size: 48px;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1F2937;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: #6B7280;
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+
+        .input-group {
+            margin-bottom: 24px;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+
+        .single-input {
+            width: 100%;
+            padding: 16px;
+            font-size: 18px;
+            font-weight: 600;
+            font-family: monospace;
+            text-align: center;
+            letter-spacing: 4px;
+            border: 2px solid #E5E7EB;
+            border-radius: 16px;
+            background: white;
+            transition: all 0.2s;
+        }
+
+        .single-input:focus {
+            outline: none;
+            border-color: #667EEA;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px -10px rgba(102, 126, 234, 0.5);
+        }
+
+        .error-message {
+            background: #FEE2E2;
+            color: #DC2626;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            margin-top: 16px;
+            display: none;
+        }
+
+        .info-text {
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid #E5E7EB;
+            color: #9CA3AF;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="card">
+        <div class="logo">
+            <span>🚖</span>
+        </div>
+        <h1>Suivi de course</h1>
+        <p class="subtitle">Entrez le code de suivi partagé par votre proche</p>
+
+        <div class="input-group">
+            <label>Code de suivi</label>
+            <input type="text"
+                   class="single-input"
+                   id="shareCode"
+                   placeholder="EX: ABC123"
+                   maxlength="6"
+                   autocomplete="off"
+                   autofocus>
+        </div>
+
+        <button class="btn btn-primary" onclick="startTracking()">
+            🔍 Suivre le trajet
+        </button>
+
+        <div class="error-message" id="errorMessage">
+            ⚠️ Code invalide. Veuillez vérifier et réessayer.
+        </div>
+
+        <div class="info-text">
+            💡 Le code vous a été partagé par le passager via WhatsApp
+        </div>
+    </div>
+</div>
+
+<script>
+    function startTracking() {
+        const shareCode = document.getElementById('shareCode').value.trim().toUpperCase();
+        const errorDiv = document.getElementById('errorMessage');
+
+        if (!shareCode || shareCode.length !== 6) {
+            errorDiv.style.display = 'block';
+            errorDiv.textContent = '⚠️ Veuillez entrer un code valide de 6 caractères';
+            return;
+        }
+
+        fetch(`/api/live/viewers/${shareCode}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.isActive === false) {
+                    errorDiv.style.display = 'block';
+                    errorDiv.textContent = '❌ Code invalide ou course terminée';
+                } else {
+                    window.location.href = `/track/tracking-passenger.html?code=${shareCode}`;
+                }
+            })
+            .catch(error => {
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = '❌ Erreur de connexion au serveur';
+            });
+    }
+
+    document.getElementById('shareCode').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') startTracking();
+    });
+</script>
+</body>
+</html>

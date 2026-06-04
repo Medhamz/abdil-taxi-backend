@@ -11,34 +11,33 @@ public class Driver {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
     private String fullName;
-
-    @Column(nullable = false, unique = true)
     private String email;
-
-    @Column(nullable = false, unique = true)
     private String phone;
-
-    @Column(nullable = false)
     private String password;
-
-    @Column(nullable = false)
     private String vehicleType;
-
-    @Column(nullable = false)
     private String licensePlate;
+    private String status;
 
-    private String status = "OFFLINE"; // ONLINE, OFFLINE, ON_TRIP
+    // Localisation
+    private Double latitude = 0.0;
+    private Double longitude = 0.0;
 
-    private double latitude = 0.0;
-    private double longitude = 0.0;
+    // Notation
+    private Double rating = 0.0;
+    private Long ratingCount = 0L;
+
+    // ✅ CHAMPS POUR LA PAUSE
+    private Boolean isOnPause = false;
+    private String pauseReason = null;
+    private LocalDateTime pauseStartTime = null;
+
+    // ✅ NOUVEAU CHAMP POUR MODE FEMME UNIQUEMENT
+    private Boolean isFemaleOnly = false;
 
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    public Driver() {}
-
-    // Getters et Setters
+    // Getters et Setters existants...
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -63,12 +62,31 @@ public class Driver {
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
 
-    public double getLatitude() { return latitude; }
-    public void setLatitude(double latitude) { this.latitude = latitude; }
+    public Double getLatitude() { return latitude; }
+    public void setLatitude(Double latitude) { this.latitude = latitude; }
 
-    public double getLongitude() { return longitude; }
-    public void setLongitude(double longitude) { this.longitude = longitude; }
+    public Double getLongitude() { return longitude; }
+    public void setLongitude(Double longitude) { this.longitude = longitude; }
+
+    public Double getRating() { return rating; }
+    public void setRating(Double rating) { this.rating = rating; }
+
+    public Long getRatingCount() { return ratingCount; }
+    public void setRatingCount(Long ratingCount) { this.ratingCount = ratingCount; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public Boolean getIsOnPause() { return isOnPause; }
+    public void setIsOnPause(Boolean isOnPause) { this.isOnPause = isOnPause; }
+
+    public String getPauseReason() { return pauseReason; }
+    public void setPauseReason(String pauseReason) { this.pauseReason = pauseReason; }
+
+    public LocalDateTime getPauseStartTime() { return pauseStartTime; }
+    public void setPauseStartTime(LocalDateTime pauseStartTime) { this.pauseStartTime = pauseStartTime; }
+
+    // ✅ GETTER ET SETTER POUR MODE FEMME UNIQUEMENT
+    public Boolean getIsFemaleOnly() { return isFemaleOnly; }
+    public void setIsFemaleOnly(Boolean isFemaleOnly) { this.isFemaleOnly = isFemaleOnly; }
 }

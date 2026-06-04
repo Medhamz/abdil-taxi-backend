@@ -13,4 +13,5 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
     List<Driver> findByStatus(String status);
     boolean existsByEmail(String email);
     boolean existsByPhone(String phone);
+    List<Driver> findByStatusAndIsFemaleOnly(String status, Boolean isFemaleOnly);
 }
