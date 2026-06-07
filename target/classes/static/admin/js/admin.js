@@ -64,20 +64,245 @@ function loadPage(page) {
         case 'advertising':
             loadAdvertising();
             break;
+        case 'gps':
+            loadGPSPage();
+            break;
         default:
             loadDashboard();
             break;
     }
 }
 
-function refreshData() {
-    const activeLink = document.querySelector('.nav-link.active');
-    if (activeLink && activeLink.dataset.page) {
-        loadPage(activeLink.dataset.page);
-    } else {
-        loadPage('dashboard');
+// ==================== GPS SUIVI AVEC ZOOM PERSISTANT ====================
+let gpsMap;
+let gpsMarkers = [];
+let gpsRefreshInterval;
+let gpsUserInteracted = false;
+let gpsResetTimeout;
+
+function loadGPSPage() {
+    const content = document.getElementById('content');
+    if (!content) return;
+
+    content.innerHTML = `
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card gps-card">
+                    <div class="card-header bg-primary text-white">
+                        <i class="fas fa-taxi"></i> Chauffeurs en ligne
+                    </div>
+                    <div class="card-body" id="driversList" style="max-height: 500px; overflow-y: auto;">
+                        <div class="text-center">Chargement des chauffeurs...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card gps-card">
+                    <div class="card-header bg-success text-white">
+                        <i class="fas fa-map"></i> Carte des chauffeurs
+                    </div>
+                    <div class="card-body">
+                        <div id="map" style="height: 500px; width: 100%;"></div>
+                        <div id="legend" class="mt-2">
+                            <span class="status-online">● En ligne</span>
+                            <span class="status-busy">● En course</span>
+                            <span class="status-offline">● Hors ligne</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    initGPSMap();
+}
+
+function initGPSMap() {
+    if (typeof google === 'undefined' || !google.maps) {
+        console.log('Google Maps pas encore chargé');
+        setTimeout(initGPSMap, 500);
+        return;
+    }
+
+    gpsMap = new google.maps.Map(document.getElementById('map'), {
+        center: { lat: 33.5731, lng: -7.5898 },
+        zoom: 12,
+        styles: [
+            { elementType: "geometry", stylers: [{ color: "#0a0e27" }] },
+            { elementType: "labels.text.stroke", stylers: [{ color: "#0a0e27" }] },
+            { elementType: "labels.text.fill", stylers: [{ color: "#00ffff" }] },
+            { featureType: "road", elementType: "geometry", stylers: [{ color: "#1a1a3a" }] },
+            { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#ffffff" }] }
+        ]
+    });
+
+    // Écouter les interactions utilisateur sur la carte
+    google.maps.event.addListener(gpsMap, 'zoom_changed', () => {
+        gpsUserInteracted = true;
+        clearTimeout(gpsResetTimeout);
+        gpsResetTimeout = setTimeout(() => {
+            gpsUserInteracted = false;
+        }, 5000);
+    });
+
+    google.maps.event.addListener(gpsMap, 'dragend', () => {
+        gpsUserInteracted = true;
+        clearTimeout(gpsResetTimeout);
+        gpsResetTimeout = setTimeout(() => {
+            gpsUserInteracted = false;
+        }, 5000);
+    });
+
+    loadGPSDrivers();
+    startGPSAutoRefresh();
+}
+
+async function loadGPSDrivers() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/drivers`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const drivers = await response.json();
+        console.log('Chauffeurs reçus:', drivers);
+        updateGPSDriversList(drivers);
+        updateGPSMap(drivers);
+    } catch (error) {
+        console.error('Erreur:', error);
+        const driversList = document.getElementById('driversList');
+        if (driversList) {
+            driversList.innerHTML = '<div class="text-center text-danger">Erreur de chargement: ' + error.message + '</div>';
+        }
     }
 }
+
+function updateGPSDriversList(drivers) {
+    const driversList = document.getElementById('driversList');
+    if (!driversList) return;
+
+    if (!drivers || drivers.length === 0) {
+        driversList.innerHTML = '<div class="text-center">Aucun chauffeur enregistré</div>';
+        return;
+    }
+
+    driversList.innerHTML = drivers.map(driver => {
+        let statusClass = '';
+        let statusText = '';
+        if (driver.status === 'ONLINE') {
+            statusClass = 'status-online';
+            statusText = 'En ligne';
+        } else if (driver.status === 'ON_TRIP') {
+            statusClass = 'status-busy';
+            statusText = 'En course';
+        } else {
+            statusClass = 'status-offline';
+            statusText = 'Hors ligne';
+        }
+
+        const hasLocation = driver.latitude && driver.longitude && driver.latitude !== 0 && driver.longitude !== 0;
+        const locationInfo = hasLocation ?
+            `<div class="driver-location"><i class="fas fa-map-marker-alt"></i> ${driver.latitude.toFixed(4)}, ${driver.longitude.toFixed(4)}</div>` :
+            `<div class="driver-location text-muted"><i class="fas fa-exclamation-triangle"></i> Position non disponible</div>`;
+
+        return `
+            <div class="driver-card card mb-2 driver-${driver.status}" onclick="centerOnDriverGPS(${driver.latitude || 33.5731}, ${driver.longitude || -7.5898})">
+                <div class="card-body p-2">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong><i class="fas fa-user"></i> ${driver.fullName}</strong><br>
+                            <small><i class="fas fa-car"></i> ${driver.vehicleType || 'Non spécifié'} - ${driver.licensePlate || 'Non spécifié'}</small><br>
+                            <small><i class="fas fa-phone"></i> ${driver.phone}</small>
+                            ${locationInfo}
+                        </div>
+                        <div>
+                            <span class="${statusClass}">${statusText}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function updateGPSMap(drivers) {
+    if (!gpsMap) return;
+
+    gpsMarkers.forEach(marker => marker.setMap(null));
+    gpsMarkers = [];
+
+    let hasValidMarkers = false;
+
+    drivers.forEach(driver => {
+        if (driver.latitude && driver.longitude && driver.latitude !== 0 && driver.longitude !== 0) {
+            hasValidMarkers = true;
+            let iconColor = '#4CAF50';
+            if (driver.status === 'ON_TRIP') iconColor = '#FF9800';
+            if (driver.status === 'OFFLINE') iconColor = '#9E9E9E';
+
+            const marker = new google.maps.Marker({
+                position: { lat: driver.latitude, lng: driver.longitude },
+                map: gpsMap,
+                title: driver.fullName,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    fillColor: iconColor,
+                    fillOpacity: 0.9,
+                    scale: 12,
+                    strokeColor: '#ffffff',
+                    strokeWeight: 2
+                }
+            });
+
+            const infoWindow = new google.maps.InfoWindow({
+                content: `
+                    <div style="font-family: Arial, sans-serif; min-width: 200px; background: #0a0e27; color: #00ffff; padding: 8px; border-radius: 8px;">
+                        <strong><i class="fas fa-user"></i> ${driver.fullName}</strong><br>
+                        <i class="fas fa-car"></i> ${driver.vehicleType || 'Non spécifié'}<br>
+                        <i class="fas fa-tag"></i> ${driver.licensePlate || 'Non spécifié'}<br>
+                        <i class="fas fa-phone"></i> ${driver.phone}<br>
+                        <span class="${driver.status === 'ONLINE' ? 'status-online' : driver.status === 'ON_TRIP' ? 'status-busy' : 'status-offline'}" style="display: inline-block; margin-top: 8px;">
+                            ${driver.status === 'ONLINE' ? 'En ligne' : driver.status === 'ON_TRIP' ? 'En course' : 'Hors ligne'}
+                        </span>
+                    </div>
+                `
+            });
+
+            marker.addListener('click', () => {
+                infoWindow.open(gpsMap, marker);
+            });
+
+            gpsMarkers.push(marker);
+        }
+    });
+
+    // Ne réajuster le zoom que si l'utilisateur n'a pas interagi manuellement
+    if (!gpsUserInteracted && hasValidMarkers && gpsMarkers.length > 0) {
+        const bounds = new google.maps.LatLngBounds();
+        gpsMarkers.forEach(marker => bounds.extend(marker.getPosition()));
+        gpsMap.fitBounds(bounds);
+    }
+}
+
+function centerOnDriverGPS(lat, lng) {
+    if (gpsMap && lat && lng && lat !== 0 && lng !== 0) {
+        gpsMap.setCenter({ lat: lat, lng: lng });
+        gpsMap.setZoom(15);
+    }
+}
+
+function startGPSAutoRefresh() {
+    if (gpsRefreshInterval) clearInterval(gpsRefreshInterval);
+    gpsRefreshInterval = setInterval(() => {
+        loadGPSDrivers();
+    }, 10000);
+}
+
+function refreshGPS() {
+    loadGPSDrivers();
+}
+
+// Exposer les fonctions globalement
+window.centerOnDriverGPS = centerOnDriverGPS;
+window.refreshGPS = refreshGPS;
+window.loadGPSPage = loadGPSPage;
 
 // Dashboard
 async function loadDashboard() {
@@ -155,7 +380,7 @@ async function loadDashboard() {
                                         <th>Destination</th>
                                         <th>Prix</th>
                                         <th>Statut</th>
-                                    </td>
+                                    </tr>
                                 </thead>
                                 <tbody>
                                     ${rides.slice(0, 5).map(ride => `
@@ -164,7 +389,7 @@ async function loadDashboard() {
                                             <td>${ride.clientName || '-'}</td>
                                             <td>${ride.pickupAddress || '-'}</td>
                                             <td>${ride.destinationAddress || '-'}</td>
-                                            <td>${ride.estimatedPrice || 0} FCFA</td>
+                                            <td>${ride.estimatedPrice || 0} FCFA\n
                                             <td><span class="status-${(ride.status || 'PENDING').toLowerCase()}">${ride.status || 'PENDING'}</span></td>
                                         </tr>
                                     `).join('')}
@@ -440,14 +665,14 @@ async function loadRides() {
                                         <td>${ride.clientPhone || '-'}</td>
                                         <td>${ride.pickupAddress || '-'}</td>
                                         <td>${ride.destinationAddress || '-'}</td>
-                                        <td>${ride.distance || 0} km</td>
-                                        <td>${ride.estimatedPrice || 0} FCFA</td>
-                                        <td>${statusBadge}</td>
-                                        <td>${statusOptions}</td>
-                                        <td><small class="text-danger">${cancelReason}</small></td>
-                                        <td>${ride.driverName || '-'}</td>
-                                        <td>${ratingDisplay}</td>
-                                        <td>${ride.createdAt ? new Date(ride.createdAt).toLocaleString() : '-'}</td>
+                                        <td>${ride.distance || 0} km\n
+                                        <td>${ride.estimatedPrice || 0} FCFA\n
+                                        <td>${statusBadge}\n
+                                        <td>${statusOptions}\n
+                                        <td><small class="text-danger">${cancelReason}</small>\n
+                                        <td>${ride.driverName || '-'}\n
+                                        <td>${ratingDisplay}\n
+                                        <td>${ride.createdAt ? new Date(ride.createdAt).toLocaleString() : '-'}\n
                                         <td>
                                             <button class="btn btn-sm btn-danger btn-action" onclick="deleteRide(${ride.id})">
                                                 <i class="fas fa-trash"></i>
@@ -941,7 +1166,10 @@ async function updateVersions() {
     }
 }
 
-// ==================== CARTE THERMIQUE ADMIN (SIMPLIFIÉE) ====================
+// ==================== CARTE DES ZONES DE DEMANDE ====================
+let demandMap;
+let demandRefreshInterval;
+
 async function loadHeatmapAdmin() {
     const content = document.getElementById('content');
 
@@ -949,14 +1177,23 @@ async function loadHeatmapAdmin() {
         <div class="row">
             <div class="col-md-12">
                 <div class="card">
-                    <div class="card-header bg-primary text-white">
-                        <i class="fas fa-fire"></i> Carte thermique des demandes
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="fas fa-chart-line"></i> Zones de forte demande clients
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-light" onclick="refreshDemandMap()">
+                                <i class="fas fa-sync-alt"></i> Rafraîchir
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body">
-                        <div id="heatmapMap" style="height: 500px; background: #e9ecef; display: flex; align-items: center; justify-content: center;">
-                            <div class="text-center">
-                                <i class="fas fa-map-marked-alt fa-3x text-muted"></i>
-                                <p class="mt-2">Fonctionnalité en cours de développement</p>
+                        <div id="demandMap" style="height: 550px; width: 100%;"></div>
+                        <div class="mt-3">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i>
+                                <strong>Carte des zones de demande</strong> - Les zones sont classées par niveau d'activité :
+                                <strong>🟢 Faible</strong> | <strong>🟡 Moyenne</strong> | <strong>🟠 Élevée</strong> | <strong>🔴 Très élevée</strong>
                             </div>
                         </div>
                     </div>
@@ -964,6 +1201,222 @@ async function loadHeatmapAdmin() {
             </div>
         </div>
     `;
+
+    initDemandMap();
+    startDemandAutoRefresh();
+}
+
+function initDemandMap() {
+    if (typeof google === 'undefined' || !google.maps) {
+        console.log('Google Maps pas encore chargé, attente...');
+        setTimeout(initDemandMap, 500);
+        return;
+    }
+
+    const mapDiv = document.getElementById('demandMap');
+    if (!mapDiv) return;
+
+    demandMap = new google.maps.Map(mapDiv, {
+        center: { lat: 33.5731, lng: -7.5898 },
+        zoom: 12,
+        styles: [
+            { elementType: "geometry", stylers: [{ color: "#0a0e27" }] },
+            { elementType: "labels.text.stroke", stylers: [{ color: "#0a0e27" }] },
+            { elementType: "labels.text.fill", stylers: [{ color: "#00ffff" }] },
+            { featureType: "road", elementType: "geometry", stylers: [{ color: "#1a1a3a" }] },
+            { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#ffffff" }] }
+        ]
+    });
+
+    loadDemandData();
+}
+
+async function loadDemandData() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/rides`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const rides = await response.json();
+
+        const driversResponse = await fetch(`${API_BASE_URL}/drivers`);
+        const drivers = await driversResponse.json();
+
+        const zones = [
+            { name: "Centre-ville (Bd Mohammed V)", lat: 33.5898, lng: -7.6122, baseActivity: 85 },
+            { name: "Gare Casa-Port", lat: 33.5988, lng: -7.6189, baseActivity: 72 },
+            { name: "Marché Central", lat: 33.5955, lng: -7.6205, baseActivity: 68 },
+            { name: "Quartier Maârif", lat: 33.5731, lng: -7.6083, baseActivity: 65 },
+            { name: "Aïn Diab (Corniche)", lat: 33.5864, lng: -7.7102, baseActivity: 45 },
+            { name: "Anfa", lat: 33.5778, lng: -7.6419, baseActivity: 50 },
+            { name: "Roches Noires", lat: 33.6125, lng: -7.5833, baseActivity: 40 },
+            { name: "Hay Hassani", lat: 33.5583, lng: -7.5750, baseActivity: 48 },
+            { name: "Aéroport Mohammed V", lat: 33.3675, lng: -7.5833, baseActivity: 35 },
+            { name: "Université Hassan II", lat: 33.5458, lng: -7.5542, baseActivity: 42 }
+        ];
+
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const recentRides = rides.filter(ride =>
+            ride.createdAt && new Date(ride.createdAt) > oneDayAgo
+        );
+
+        zones.forEach(zone => {
+            let activityCount = 0;
+            recentRides.forEach(ride => {
+                const address = (ride.pickupAddress || '').toLowerCase();
+                if (address.includes(zone.name.toLowerCase()) ||
+                    (zone.name === "Centre-ville (Bd Mohammed V)" &&
+                     (address.includes('centre') || address.includes('ville') || address.includes('mohammed v'))) ||
+                    (zone.name === "Gare Casa-Port" && address.includes('gare'))) {
+                    activityCount++;
+                }
+            });
+
+            zone.realActivity = Math.min(100, zone.baseActivity + (activityCount * 5));
+            zone.recentRideCount = activityCount;
+        });
+
+        zones.sort((a, b) => b.realActivity - a.realActivity);
+
+        const totalRecent = recentRides.length;
+        const alertDiv = document.querySelector('#demandMap').closest('.card').querySelector('.alert-info');
+        if (alertDiv) {
+            alertDiv.innerHTML = `
+                <i class="fas fa-info-circle"></i>
+                <strong>Carte des zones de demande</strong> - ${totalRecent} courses demandées dans les dernières 24h.<br>
+                <strong>🟢 Faible</strong> | <strong>🟡 Moyenne</strong> | <strong>🟠 Élevée</strong> | <strong>🔴 Très élevée</strong>
+            `;
+        }
+
+        zones.forEach(zone => {
+            let color = '';
+            let radius = 100;
+            let activityLabel = '';
+
+            if (zone.realActivity >= 70) {
+                color = '#FF0000';
+                activityLabel = '🔴 Très élevée';
+                radius = 180;
+            } else if (zone.realActivity >= 55) {
+                color = '#FF6600';
+                activityLabel = '🟠 Élevée';
+                radius = 150;
+            } else if (zone.realActivity >= 40) {
+                color = '#FFCC00';
+                activityLabel = '🟡 Moyenne';
+                radius = 120;
+            } else {
+                color = '#33CC33';
+                activityLabel = '🟢 Faible';
+                radius = 90;
+            }
+
+            const circle = new google.maps.Circle({
+                map: demandMap,
+                center: { lat: zone.lat, lng: zone.lng },
+                radius: radius,
+                fillColor: color,
+                fillOpacity: 0.4,
+                strokeColor: color,
+                strokeWeight: 2,
+                strokeOpacity: 0.8
+            });
+
+            const marker = new google.maps.Marker({
+                position: { lat: zone.lat, lng: zone.lng },
+                map: demandMap,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    fillColor: color,
+                    fillOpacity: 0.9,
+                    scale: 14,
+                    strokeColor: '#ffffff',
+                    strokeWeight: 2
+                },
+                label: {
+                    text: '📍',
+                    color: '#ffffff',
+                    fontSize: '14px'
+                }
+            });
+
+            const infoWindow = new google.maps.InfoWindow({
+                content: `
+                    <div style="font-family: Arial, sans-serif; min-width: 220px; background: #0a0e27; color: #00ffff; padding: 8px; border-radius: 8px;">
+                        <strong><i class="fas fa-map-marker-alt"></i> ${zone.name}</strong><br>
+                        <span style="color: ${color}">●</span> <strong>Activité: ${activityLabel}</strong> (${zone.realActivity}%)<br>
+                        <i class="fas fa-calendar-alt"></i> ${zone.recentRideCount} courses dans les dernières 24h<br>
+                        <i class="fas fa-chart-line"></i> Niveau de demande: ${zone.realActivity > 70 ? 'Excellent pour se positionner' : zone.realActivity > 55 ? 'Bon secteur' : 'Activité modérée'}
+                    </div>
+                `
+            });
+
+            marker.addListener('click', () => {
+                infoWindow.open(demandMap, marker);
+            });
+        });
+
+        const onlineDrivers = drivers.filter(d => d.status === 'ONLINE' || d.status === 'ON_TRIP');
+
+        onlineDrivers.forEach(driver => {
+            if (driver.latitude && driver.longitude && driver.latitude !== 0 && driver.longitude !== 0) {
+                const marker = new google.maps.Marker({
+                    position: { lat: driver.latitude, lng: driver.longitude },
+                    map: demandMap,
+                    title: driver.fullName,
+                    icon: {
+                        url: 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png',
+                        scaledSize: new google.maps.Size(32, 32)
+                    }
+                });
+
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `
+                        <div style="font-family: Arial, sans-serif; min-width: 180px;">
+                            <strong><i class="fas fa-user"></i> ${driver.fullName}</strong><br>
+                            <i class="fas fa-car"></i> ${driver.vehicleType || 'Non spécifié'}<br>
+                            <i class="fas fa-phone"></i> ${driver.phone}<br>
+                            <span class="badge ${driver.status === 'ONLINE' ? 'bg-success' : 'bg-warning'}">
+                                ${driver.status === 'ONLINE' ? 'En ligne' : 'En course'}
+                            </span>
+                        </div>
+                    `
+                });
+
+                marker.addListener('click', () => {
+                    infoWindow.open(demandMap, marker);
+                });
+            }
+        });
+
+        const bounds = new google.maps.LatLngBounds();
+        zones.forEach(zone => {
+            bounds.extend(new google.maps.LatLng(zone.lat, zone.lng));
+        });
+        demandMap.fitBounds(bounds);
+
+    } catch (error) {
+        console.error('Erreur chargement zones:', error);
+        const mapDiv = document.getElementById('demandMap');
+        if (mapDiv) {
+            mapDiv.innerHTML = `
+                <div style="height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; background: #0a0e27; color: #00ffff;">
+                    <i class="fas fa-map-marked-alt fa-4x"></i>
+                    <p class="mt-3">Erreur de chargement: ${error.message}</p>
+                    <button class="btn btn-sm btn-primary mt-2" onclick="refreshDemandMap()">Réessayer</button>
+                </div>
+            `;
+        }
+    }
+}
+
+function refreshDemandMap() {
+    loadDemandData();
+}
+
+function startDemandAutoRefresh() {
+    if (demandRefreshInterval) clearInterval(demandRefreshInterval);
+    demandRefreshInterval = setInterval(() => {
+        loadDemandData();
+    }, 60000);
 }
 
 // ==================== COURSES PROGRAMMÉES ====================
@@ -974,7 +1427,6 @@ async function loadScheduledRides() {
         const response = await fetch(`${API_BASE_URL_TAXI}/scheduled/admin/all`);
         const rides = await response.json();
 
-        // Vérifier que rides est un tableau
         if (!Array.isArray(rides) || rides.length === 0) {
             content.innerHTML = `
                 <div class="table-container">
@@ -1020,15 +1472,15 @@ async function loadScheduledRides() {
                                         statusBadge = '<span class="badge bg-secondary">' + ride.status + '</span>';
                                 }
                                 return `
-                                    </tr>
+                                    <tr>
                                         <td>#${ride.id}</td>
                                         <td>${ride.clientName || '-'}</td>
                                         <td>${ride.clientPhone || '-'}</td>
                                         <td>${ride.pickupAddress || '-'}</td>
                                         <td>${ride.destinationAddress || '-'}</td>
                                         <td>${new Date(ride.scheduledDateTime).toLocaleString()}</td>
-                                        <td>${ride.estimatedPrice || 0} FCFA</td>
-                                        <td>${statusBadge}</td>
+                                        <td>${ride.estimatedPrice || 0} FCFA\n
+                                        <td>${statusBadge}\n
                                         <td>
                                             <button class="btn btn-sm btn-danger" onclick="deleteScheduledRide(${ride.id})">
                                                 <i class="fas fa-trash"></i>
@@ -1067,7 +1519,6 @@ async function loadDisputes() {
         const response = await fetch(`${API_BASE_URL}/disputes/all`);
         const disputes = await response.json();
 
-        // ✅ S'assurer que disputes est bien un tableau
         if (!Array.isArray(disputes) || disputes.length === 0) {
             content.innerHTML = `
                 <div class="table-container">
@@ -1186,7 +1637,7 @@ async function rejectDispute(id) {
     }
 }
 
-// ==================== TAXI PUB (ADVERTISING) ====================
+// ==================== TAXI PUB ====================
 async function loadAdvertising() {
     const content = document.getElementById('content');
     if (!content) return;
@@ -1197,7 +1648,6 @@ async function loadAdvertising() {
         const response = await fetch(`${API_BASE_URL}/advertising/admin/all`);
         let data = await response.json();
 
-        // ✅ CORRECTION : s'assurer que 'ads' est un tableau
         let ads = Array.isArray(data) ? data : (data.data || data.content || data.advertisements || []);
 
         if (!ads || ads.length === 0) {
@@ -1234,7 +1684,7 @@ async function loadAdvertising() {
                                     <td>${ad.clientName || '-'}</td>
                                     <td><strong>${ad.productName || '-'}</strong><br><small>${ad.description || ''}</small></td>
                                     <td>${ad.duration}</td>
-                                    <td>${ad.price.toLocaleString()} FCFA</td>
+                                    <td>${ad.price.toLocaleString()} FCFA\n
                                     <td>${ad.paymentMethod === 'CASH' ? '💵 Espèces' : '💰 Porte-monnaie'}</td>
                                     <td><span class="badge bg-${getAdStatusClass(ad.status)}">${getAdStatusLabel(ad.status)}</span></td>
                                     <td>
@@ -1280,7 +1730,7 @@ function getAdStatusLabel(status) {
 
 async function validateCashAdvertising(adId) {
     const notes = prompt("📝 Notes internes (optionnel) :");
-    if (notes === null) return; // annulé
+    if (notes === null) return;
 
     try {
         const response = await fetch(`${API_BASE_URL}/advertising/admin/validate/${adId}?adminNotes=${encodeURIComponent(notes)}`, {
@@ -1288,7 +1738,7 @@ async function validateCashAdvertising(adId) {
         });
         if (response.ok) {
             alert('✅ Paiement espèces validé. La publicité sera imprimée et posée sur les taxis.');
-            loadAdvertising(); // recharge la liste
+            loadAdvertising();
         } else {
             const err = await response.text();
             alert('❌ Erreur lors de la validation : ' + err);

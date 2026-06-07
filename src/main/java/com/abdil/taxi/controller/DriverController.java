@@ -30,6 +30,8 @@ public class DriverController {
     @Autowired
     private ReviewRepository reviewRepository;
 
+    // ==================== AUTHENTIFICATION ====================
+
     @PostMapping("/register")
     public ResponseEntity<DriverAuthResponse> register(@RequestBody DriverRegisterRequest request) {
         try {
@@ -56,11 +58,18 @@ public class DriverController {
             driver.setVehicleType(request.getVehicleType());
             driver.setLicensePlate(request.getLicensePlate());
             driver.setStatus("OFFLINE");
+            driver.setRating(0.0);
+            driver.setRatingCount(0L);
+            driver.setIsOnPause(false);
+            driver.setIsFemaleOnly(false);
 
             Driver savedDriver = driverRepository.save(driver);
             System.out.println("✅ Chauffeur créé avec ID: " + savedDriver.getId());
 
-            return ResponseEntity.ok(new DriverAuthResponse(null, "Inscription réussie", true, savedDriver));
+            // Générer un token
+            String token = generateToken(savedDriver);
+
+            return ResponseEntity.ok(new DriverAuthResponse(token, "Inscription réussie", true, savedDriver));
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -87,7 +96,10 @@ public class DriverController {
             System.out.println("✅ Connexion réussie pour: " + driver.getEmail());
             System.out.println("🔑 Driver ID: " + driver.getId());
 
-            return ResponseEntity.ok(new DriverAuthResponse(null, "Connexion réussie", true, driver));
+            // Générer un token
+            String token = generateToken(driver);
+
+            return ResponseEntity.ok(new DriverAuthResponse(token, "Connexion réussie", true, driver));
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -95,6 +107,13 @@ public class DriverController {
                     .body(new DriverAuthResponse(null, "Erreur: " + e.getMessage(), false, null));
         }
     }
+
+    private String generateToken(Driver driver) {
+        // Token simple avec ID + timestamp
+        return "driver_jwt_token_" + driver.getId() + "_" + System.currentTimeMillis();
+    }
+
+    // ==================== GESTION CHAUFFEUR ====================
 
     @PostMapping("/location")
     public ResponseEntity<Driver> updateLocation(@RequestParam Long driverId,
@@ -118,6 +137,79 @@ public class DriverController {
         driver.setStatus(status);
         return ResponseEntity.ok(driverRepository.save(driver));
     }
+
+    @GetMapping("/status/{driverId}")
+    public ResponseEntity<Driver> getDriverStatus(@PathVariable Long driverId) {
+        Driver driver = driverRepository.findById(driverId).orElse(null);
+        if (driver == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(driver);
+    }
+
+    @PostMapping("/pause")
+    public ResponseEntity<Driver> setPause(@RequestParam Long driverId,
+                                           @RequestParam String reason,
+                                           @RequestParam Boolean isPause) {
+        Driver driver = driverRepository.findById(driverId).orElse(null);
+        if (driver == null) return ResponseEntity.notFound().build();
+
+        driver.setIsOnPause(isPause);
+        if (isPause) {
+            driver.setPauseReason(reason);
+            driver.setPauseStartTime(LocalDateTime.now());
+            driver.setStatus("OFFLINE");
+        } else {
+            driver.setPauseReason(null);
+            driver.setPauseStartTime(null);
+            driver.setStatus("ONLINE");
+        }
+
+        return ResponseEntity.ok(driverRepository.save(driver));
+    }
+
+    @PostMapping("/female-only")
+    public ResponseEntity<Driver> updateFemaleOnlyStatus(@RequestParam Long driverId, @RequestParam Boolean enabled) {
+        Driver driver = driverRepository.findById(driverId).orElse(null);
+        if (driver == null) return ResponseEntity.notFound().build();
+
+        driver.setIsFemaleOnly(enabled);
+        return ResponseEntity.ok(driverRepository.save(driver));
+    }
+
+    @GetMapping("/female-only/available")
+    public ResponseEntity<List<Driver>> getFemaleDrivers() {
+        List<Driver> femaleDrivers = driverRepository.findByStatusAndIsFemaleOnly("ONLINE", true);
+        return ResponseEntity.ok(femaleDrivers);
+    }
+
+    @GetMapping("/available")
+    public ResponseEntity<List<Driver>> getAvailableDrivers(@RequestParam(required = false) Boolean femaleOnly) {
+        List<Driver> drivers = driverRepository.findByStatus("ONLINE");
+
+        if (femaleOnly != null && femaleOnly) {
+            drivers = drivers.stream()
+                    .filter(d -> d.getIsFemaleOnly() != null && d.getIsFemaleOnly())
+                    .collect(Collectors.toList());
+        }
+
+        return ResponseEntity.ok(drivers);
+    }
+
+    @GetMapping("/location/{driverId}")
+    public ResponseEntity<Map<String, Double>> getDriverLocation(@PathVariable Long driverId) {
+        Driver driver = driverRepository.findById(driverId).orElse(null);
+        if (driver == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Map<String, Double> location = new HashMap<>();
+        location.put("latitude", driver.getLatitude() != null ? driver.getLatitude() : 0.0);
+        location.put("longitude", driver.getLongitude() != null ? driver.getLongitude() : 0.0);
+        return ResponseEntity.ok(location);
+    }
+
+    // ==================== GESTION DES COURSES ====================
 
     @GetMapping("/rides/pending")
     public ResponseEntity<List<Ride>> getPendingRides() {
@@ -177,15 +269,47 @@ public class DriverController {
         return ResponseEntity.ok(rideRepository.save(ride));
     }
 
-    @GetMapping("/driver/{driverId}/rides")
-    public ResponseEntity<List<Ride>> getDriverRides(@PathVariable Long driverId) {
-        List<Ride> rides = rideRepository.findAll().stream()
-                .filter(r -> r.getDriverName() != null)
-                .toList();
-        return ResponseEntity.ok(rides);
+    @PutMapping("/ride/{rideId}/cancel")
+    public ResponseEntity<?> cancelRideByDriver(@PathVariable Long rideId,
+                                                @RequestParam Long driverId,
+                                                @RequestParam(required = false) String reason) {
+        System.out.println("=== ANNULATION COURSE PAR CHAUFFEUR ===");
+        System.out.println("rideId: " + rideId);
+        System.out.println("driverId: " + driverId);
+        System.out.println("Raison: " + reason);
+
+        Ride ride = rideRepository.findById(rideId).orElse(null);
+        if (ride == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        if (ride.getDriverId() == null || !ride.getDriverId().equals(driverId)) {
+            return ResponseEntity.badRequest().body("Cette course ne vous est pas assignée");
+        }
+
+        if (!ride.getStatus().equals("ACCEPTED") && !ride.getStatus().equals("STARTED")) {
+            return ResponseEntity.badRequest().body("Impossible d'annuler une course non acceptée");
+        }
+
+        ride.setStatus("CANCELLED");
+        ride.setCancellationReason(reason != null ? reason : "Annulé par le chauffeur");
+
+        Ride cancelledRide = rideRepository.save(ride);
+        System.out.println("✅ Course annulée par chauffeur: ID=" + cancelledRide.getId());
+
+        try {
+            notificationService.sendNotificationToClient(
+                    ride.getUserId(),
+                    "❌ Course annulée",
+                    "Votre chauffeur a annulé la course. Raison: " + (reason != null ? reason : "Non spécifiée")
+            );
+        } catch (Exception e) {
+            System.err.println("❌ Erreur envoi notification: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(cancelledRide);
     }
 
-    // ✅ MÉTHODE MODIFIÉE POUR RENVOYER LE paymentMethod
     @GetMapping("/ride/active")
     public ResponseEntity<Map<String, Object>> getActiveRideForDriver(@RequestParam Long driverId) {
         List<Ride> activeRides = rideRepository.findAll().stream()
@@ -202,7 +326,6 @@ public class DriverController {
         System.out.println("🚖 Course active chauffeur: ID=" + activeRide.getId());
         System.out.println("💰 Mode de paiement: " + activeRide.getPaymentMethod());
 
-        // ✅ Retourner un Map avec toutes les informations + paymentMethod
         Map<String, Object> response = new HashMap<>();
         response.put("id", activeRide.getId());
         response.put("userId", activeRide.getUserId());
@@ -233,7 +356,26 @@ public class DriverController {
         return ResponseEntity.ok(history);
     }
 
-    // ==================== STATISTIQUES TABLEAU DE BORD ====================
+    @DeleteMapping("/history/{rideId}")
+    public ResponseEntity<Void> deleteRideFromHistory(@PathVariable Long rideId) {
+        System.out.println("=== SUPPRESSION COURSE ID: " + rideId);
+        if (rideRepository.existsById(rideId)) {
+            rideRepository.deleteById(rideId);
+            System.out.println("✅ Course supprimée");
+            return ResponseEntity.ok().build();
+        }
+        return ResponseEntity.notFound().build();
+    }
+
+    @DeleteMapping("/history/batch")
+    public ResponseEntity<Void> deleteMultipleRides(@RequestBody List<Long> rideIds) {
+        System.out.println("=== SUPPRESSION MULTIPLE: " + rideIds.size() + " courses");
+        rideRepository.deleteAllById(rideIds);
+        System.out.println("✅ Courses supprimées");
+        return ResponseEntity.ok().build();
+    }
+
+    // ==================== STATISTIQUES ====================
 
     @GetMapping("/dashboard/stats/{driverId}")
     public ResponseEntity<Map<String, Object>> getDashboardStats(@PathVariable Long driverId) {
@@ -329,80 +471,7 @@ public class DriverController {
         return ResponseEntity.ok(response);
     }
 
-    @DeleteMapping("/history/{rideId}")
-    public ResponseEntity<Void> deleteRideFromHistory(@PathVariable Long rideId) {
-        System.out.println("=== SUPPRESSION COURSE ID: " + rideId);
-        if (rideRepository.existsById(rideId)) {
-            rideRepository.deleteById(rideId);
-            System.out.println("✅ Course supprimée");
-            return ResponseEntity.ok().build();
-        }
-        return ResponseEntity.notFound().build();
-    }
-
-    @DeleteMapping("/history/batch")
-    public ResponseEntity<Void> deleteMultipleRides(@RequestBody List<Long> rideIds) {
-        System.out.println("=== SUPPRESSION MULTIPLE: " + rideIds.size() + " courses");
-        rideRepository.deleteAllById(rideIds);
-        System.out.println("✅ Courses supprimées");
-        return ResponseEntity.ok().build();
-    }
-
-    @GetMapping("/location/{driverId}")
-    public ResponseEntity<Map<String, Double>> getDriverLocation(@PathVariable Long driverId) {
-        Driver driver = driverRepository.findById(driverId).orElse(null);
-        if (driver == null) {
-            return ResponseEntity.notFound().build();
-        }
-
-        Map<String, Double> location = new HashMap<>();
-        location.put("latitude", driver.getLatitude() != null ? driver.getLatitude() : 0.0);
-        location.put("longitude", driver.getLongitude() != null ? driver.getLongitude() : 0.0);
-        return ResponseEntity.ok(location);
-    }
-
-    @PutMapping("/ride/{rideId}/cancel")
-    public ResponseEntity<?> cancelRideByDriver(@PathVariable Long rideId,
-                                                @RequestParam Long driverId,
-                                                @RequestParam(required = false) String reason) {
-        System.out.println("=== ANNULATION COURSE PAR CHAUFFEUR ===");
-        System.out.println("rideId: " + rideId);
-        System.out.println("driverId: " + driverId);
-        System.out.println("Raison: " + reason);
-
-        Ride ride = rideRepository.findById(rideId).orElse(null);
-        if (ride == null) {
-            return ResponseEntity.notFound().build();
-        }
-
-        if (ride.getDriverId() == null || !ride.getDriverId().equals(driverId)) {
-            return ResponseEntity.badRequest().body("Cette course ne vous est pas assignée");
-        }
-
-        if (!ride.getStatus().equals("ACCEPTED") && !ride.getStatus().equals("STARTED")) {
-            return ResponseEntity.badRequest().body("Impossible d'annuler une course non acceptée");
-        }
-
-        ride.setStatus("CANCELLED");
-        ride.setCancellationReason(reason != null ? reason : "Annulé par le chauffeur");
-
-        Ride cancelledRide = rideRepository.save(ride);
-        System.out.println("✅ Course annulée par chauffeur: ID=" + cancelledRide.getId());
-
-        try {
-            notificationService.sendNotificationToClient(
-                    ride.getUserId(),
-                    "❌ Course annulée",
-                    "Votre chauffeur a annulé la course. Raison: " + (reason != null ? reason : "Non spécifiée")
-            );
-        } catch (Exception e) {
-            System.err.println("❌ Erreur envoi notification: " + e.getMessage());
-        }
-
-        return ResponseEntity.ok(cancelledRide);
-    }
-
-    // ==================== HEATMAP POUR CHAUFFEUR ====================
+    // ==================== HEATMAP ====================
 
     @GetMapping("/heatmap")
     public ResponseEntity<List<Map<String, Object>>> getHeatmapData() {
@@ -454,64 +523,6 @@ public class DriverController {
         return ResponseEntity.ok(hotspots);
     }
 
-    @GetMapping("/status/{driverId}")
-    public ResponseEntity<Driver> getDriverStatus(@PathVariable Long driverId) {
-        Driver driver = driverRepository.findById(driverId).orElse(null);
-        if (driver == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok(driver);
-    }
-
-    @PostMapping("/pause")
-    public ResponseEntity<Driver> setPause(@RequestParam Long driverId,
-                                           @RequestParam String reason,
-                                           @RequestParam Boolean isPause) {
-        Driver driver = driverRepository.findById(driverId).orElse(null);
-        if (driver == null) return ResponseEntity.notFound().build();
-
-        driver.setIsOnPause(isPause);
-        if (isPause) {
-            driver.setPauseReason(reason);
-            driver.setPauseStartTime(LocalDateTime.now());
-            driver.setStatus("OFFLINE");
-        } else {
-            driver.setPauseReason(null);
-            driver.setPauseStartTime(null);
-            driver.setStatus("ONLINE");
-        }
-
-        return ResponseEntity.ok(driverRepository.save(driver));
-    }
-
-    @GetMapping("/available")
-    public ResponseEntity<List<Driver>> getAvailableDrivers(@RequestParam(required = false) Boolean femaleOnly) {
-        List<Driver> drivers = driverRepository.findByStatus("ONLINE");
-
-        if (femaleOnly != null && femaleOnly) {
-            drivers = drivers.stream()
-                    .filter(d -> d.getIsFemaleOnly() != null && d.getIsFemaleOnly())
-                    .collect(Collectors.toList());
-        }
-
-        return ResponseEntity.ok(drivers);
-    }
-
-    @PostMapping("/female-only")
-    public ResponseEntity<Driver> updateFemaleOnlyStatus(@RequestParam Long driverId, @RequestParam Boolean enabled) {
-        Driver driver = driverRepository.findById(driverId).orElse(null);
-        if (driver == null) return ResponseEntity.notFound().build();
-
-        driver.setIsFemaleOnly(enabled);
-        return ResponseEntity.ok(driverRepository.save(driver));
-    }
-
-    @GetMapping("/female-only/available")
-    public ResponseEntity<List<Driver>> getFemaleDrivers() {
-        List<Driver> femaleDrivers = driverRepository.findByStatusAndIsFemaleOnly("ONLINE", true);
-        return ResponseEntity.ok(femaleDrivers);
-    }
-
     private Map<String, Object> createDemoHotspot(double lat, double lng, int intensity, String zoneName, int requestCount) {
         Map<String, Object> point = new HashMap<>();
         point.put("lat", lat);
@@ -522,7 +533,8 @@ public class DriverController {
         return point;
     }
 
-    // ✅ CONFIRMATION PAIEMENT ESPÈCES PAR CHAUFFEUR
+    // ==================== PAIEMENTS ====================
+
     @PutMapping("/ride/{rideId}/confirm-cash-payment")
     public ResponseEntity<Map<String, Object>> confirmCashPayment(
             @PathVariable Long rideId,
@@ -587,5 +599,89 @@ public class DriverController {
         }
 
         return ResponseEntity.ok(response);
+    }
+
+    // ==================== ADMIN ENDPOINTS ====================
+
+    @GetMapping("/admin/drivers")
+    public ResponseEntity<List<Driver>> getAllDriversForAdmin() {
+        System.out.println("=== ADMIN: RÉCUPÉRATION TOUS LES CHAUFFEURS ===");
+        List<Driver> drivers = driverRepository.findAll();
+
+        // Mettre à jour le statut des chauffeurs en fonction des courses actives
+        for (Driver driver : drivers) {
+            List<Ride> activeRides = rideRepository.findAll().stream()
+                    .filter(r -> r.getDriverId() != null && r.getDriverId().equals(driver.getId()))
+                    .filter(r -> r.getStatus().equals("ACCEPTED") || r.getStatus().equals("STARTED"))
+                    .toList();
+
+            if (!activeRides.isEmpty() && !"OFFLINE".equals(driver.getStatus())) {
+                driver.setStatus("ON_TRIP");
+            }
+
+            System.out.println("Chauffeur: " + driver.getFullName() +
+                    ", Status: " + driver.getStatus() +
+                    ", Position: lat=" + driver.getLatitude() + ", lng=" + driver.getLongitude());
+        }
+
+        return ResponseEntity.ok(drivers);
+    }
+
+    @GetMapping("/admin/drivers/online")
+    public ResponseEntity<List<Driver>> getOnlineDriversForAdmin() {
+        System.out.println("=== ADMIN: CHAUFFEURS EN LIGNE ===");
+        List<Driver> onlineDrivers = driverRepository.findAll().stream()
+                .filter(d -> "ONLINE".equals(d.getStatus()) || "ON_TRIP".equals(d.getStatus()))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(onlineDrivers);
+    }
+
+    @GetMapping("/admin/drivers/{driverId}/location")
+    public ResponseEntity<Map<String, Object>> getDriverLocationForAdmin(@PathVariable Long driverId) {
+        System.out.println("=== ADMIN: POSITION CHAUFFEUR ID: " + driverId);
+
+        Driver driver = driverRepository.findById(driverId).orElse(null);
+        if (driver == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Map<String, Object> location = new HashMap<>();
+        location.put("driverId", driver.getId());
+        location.put("driverName", driver.getFullName());
+        location.put("latitude", driver.getLatitude() != null ? driver.getLatitude() : 0.0);
+        location.put("longitude", driver.getLongitude() != null ? driver.getLongitude() : 0.0);
+        location.put("status", driver.getStatus());
+        location.put("phone", driver.getPhone());
+        location.put("vehicleType", driver.getVehicleType());
+        location.put("licensePlate", driver.getLicensePlate());
+        location.put("email", driver.getEmail());
+        location.put("lastUpdate", LocalDateTime.now().toString());
+
+        return ResponseEntity.ok(location);
+    }
+
+    @GetMapping("/admin/drivers/locations")
+    public ResponseEntity<List<Map<String, Object>>> getAllDriversLocations() {
+        System.out.println("=== ADMIN: TOUTES LES POSITIONS CHAUFFEURS ===");
+        List<Driver> drivers = driverRepository.findAll();
+        List<Map<String, Object>> locations = new ArrayList<>();
+
+        for (Driver driver : drivers) {
+            if (driver.getLatitude() != null && driver.getLongitude() != null
+                    && driver.getLatitude() != 0 && driver.getLongitude() != 0) {
+                Map<String, Object> loc = new HashMap<>();
+                loc.put("driverId", driver.getId());
+                loc.put("driverName", driver.getFullName());
+                loc.put("latitude", driver.getLatitude());
+                loc.put("longitude", driver.getLongitude());
+                loc.put("status", driver.getStatus());
+                loc.put("vehicleType", driver.getVehicleType());
+                locations.add(loc);
+            }
+        }
+
+        System.out.println("📍 " + locations.size() + " chauffeurs avec position valide");
+        return ResponseEntity.ok(locations);
     }
 }
