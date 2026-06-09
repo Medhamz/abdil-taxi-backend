@@ -149,6 +149,12 @@
                         <i class="fas fa-ticket-alt"></i> COUPONS
                     </a>
                 </li>
+                <!-- Licences -->
+                <li class="nav-item">
+                    <a class="nav-link" href="#" data-page="licenses">
+                        <i class="fas fa-key"></i> LICENCES
+                    </a>
+                </li>
             </ul>
         </nav>
 
@@ -207,7 +213,8 @@
                 'scheduled': 'PROGRAMMÉES',
                 'disputes': 'LITIGES',
                 'gps': 'SUIVI GPS',
-                'advertising': 'TAXI PUB'
+                'advertising': 'TAXI PUB',
+                'licenses': 'LICENCES'   // ✅ AJOUTÉ
             };
             document.getElementById('pageTitle').textContent = titles[page] || page.toUpperCase();
 

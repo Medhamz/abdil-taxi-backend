@@ -67,6 +67,9 @@ function loadPage(page) {
         case 'gps':
             loadGPSPage();
             break;
+        case 'licenses':
+            loadLicenses();
+            break;
         default:
             loadDashboard();
             break;
@@ -136,7 +139,6 @@ function initGPSMap() {
         ]
     });
 
-    // Écouter les interactions utilisateur sur la carte
     google.maps.event.addListener(gpsMap, 'zoom_changed', () => {
         gpsUserInteracted = true;
         clearTimeout(gpsResetTimeout);
@@ -273,7 +275,6 @@ function updateGPSMap(drivers) {
         }
     });
 
-    // Ne réajuster le zoom que si l'utilisateur n'a pas interagi manuellement
     if (!gpsUserInteracted && hasValidMarkers && gpsMarkers.length > 0) {
         const bounds = new google.maps.LatLngBounds();
         gpsMarkers.forEach(marker => bounds.extend(marker.getPosition()));
@@ -299,7 +300,6 @@ function refreshGPS() {
     loadGPSDrivers();
 }
 
-// Exposer les fonctions globalement
 window.centerOnDriverGPS = centerOnDriverGPS;
 window.refreshGPS = refreshGPS;
 window.loadGPSPage = loadGPSPage;
@@ -1699,7 +1699,7 @@ async function loadAdvertising() {
                                 </tr>
                             `).join('')}
                         </tbody>
-                    </table>
+                    <table>
                 </div>
             </div>
         `;
@@ -1747,3 +1747,440 @@ async function validateCashAdvertising(adId) {
         alert('Erreur réseau : ' + error.message);
     }
 }
+
+// ==================== GESTION DES LICENCES ====================
+let licensesChart;
+
+async function loadLicenses() {
+    const content = document.getElementById('content');
+    if (!content) return;
+
+    content.innerHTML = `
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <i class="fas fa-key"></i> Générer une licence
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <label class="form-label">Type de licence</label>
+                                <select class="form-select" id="licenseType">
+                                    <option value="TRIAL">🎁 Essai (7 jours - Gratuit)</option>
+                                    <option value="1_YEAR">📅 1 an - 1000 FCFA</option>
+                                    <option value="2_YEARS">📅 2 ans - 1900 FCFA</option>
+                                    <option value="3_YEARS">📅 3 ans - 2800 FCFA</option>
+                                    <option value="4_YEARS">📅 4 ans - 3700 FCFA</option>
+                                    <option value="5_YEARS">📅 5 ans - 4500 FCFA</option>
+                                    <option value="PERPETUAL">♾️ Perpétuelle - 10000 FCFA</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Application</label>
+                                <select class="form-select" id="licenseAppType">
+                                    <option value="CLIENT">👥 Client</option>
+                                    <option value="DRIVER">🚖 Chauffeur</option>
+                                    <option value="BOTH">🔄 Les deux</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Client (optionnel)</label>
+                                <select class="form-select" id="licenseUserId">
+                                    <option value="">-- Aucun (licence non attribuée) --</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">&nbsp;</label>
+                                <button class="btn btn-success w-100" onclick="generateLicense()">
+                                    <i class="fas fa-plus-circle"></i> Générer la licence
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-list"></i> Liste des licences</span>
+                        <button class="btn btn-sm btn-light" onclick="refreshLicensesList()">
+                            <i class="fas fa-sync-alt"></i> Rafraîchir
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped" id="licensesTable">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Clé</th>
+                                        <th>Type</th>
+                                        <th>App</th>
+                                        <th>Utilisateur</th>
+                                        <th>Créée le</th>
+                                        <th>Expiration</th>
+                                        <th>Statut</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="9" class="text-center">Chargement...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <i class="fas fa-key fa-3x text-primary"></i>
+                        <h3 id="statTotalLicenses">0</h3>
+                        <p>Total licences</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <i class="fas fa-check-circle fa-3x text-success"></i>
+                        <h3 id="statActiveLicenses">0</h3>
+                        <p>Licences actives</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <i class="fas fa-chart-line fa-3x text-warning"></i>
+                        <h3 id="statTotalRevenue">0 FCFA</h3>
+                        <p>Revenu total</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-chart-pie"></i> Statistiques des licences
+                    </div>
+                    <div class="card-body">
+                        <canvas id="licensesStatsChart" height="100"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    await loadUsersForSelect();
+    await refreshLicensesList();
+    await loadLicenseStats();
+}
+
+async function loadUsersForSelect() {
+    try {
+        const [clientsRes, driversRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/clients`),
+            fetch(`${API_BASE_URL}/drivers`)
+        ]);
+
+        const clients = await clientsRes.json();
+        const drivers = await driversRes.json();
+
+        const select = document.getElementById('licenseUserId');
+        if (!select) return;
+
+        select.innerHTML = '<option value="">-- Aucun (licence non attribuée) --</option>';
+
+        if (clients && clients.length) {
+            const optgroupClients = document.createElement('optgroup');
+            optgroupClients.label = '👥 Clients';
+            clients.forEach(c => {
+                const option = document.createElement('option');
+                option.value = `CLIENT_${c.id}`;
+                option.textContent = `${c.fullName || c.email || 'Client'} (ID: ${c.id})`;
+                optgroupClients.appendChild(option);
+            });
+            select.appendChild(optgroupClients);
+        }
+
+        if (drivers && drivers.length) {
+            const optgroupDrivers = document.createElement('optgroup');
+            optgroupDrivers.label = '🚖 Chauffeurs';
+            drivers.forEach(d => {
+                const option = document.createElement('option');
+                option.value = `DRIVER_${d.id}`;
+                option.textContent = `${d.fullName || d.email || 'Chauffeur'} (ID: ${d.id})`;
+                optgroupDrivers.appendChild(option);
+            });
+            select.appendChild(optgroupDrivers);
+        }
+    } catch (error) {
+        console.error('Erreur chargement utilisateurs:', error);
+    }
+}
+
+async function generateLicense() {
+    const licenseType = document.getElementById('licenseType').value;
+    const appType = document.getElementById('licenseAppType').value;
+    const userIdRaw = document.getElementById('licenseUserId').value;
+
+    let userId = null;
+    let userType = null;
+
+    if (userIdRaw) {
+        const parts = userIdRaw.split('_');
+        userType = parts[0];
+        userId = parseInt(parts[1]);
+    }
+
+    const durationMap = {
+        'TRIAL': 7,
+        '1_YEAR': 365,
+        '2_YEARS': 730,
+        '3_YEARS': 1095,
+        '4_YEARS': 1460,
+        '5_YEARS': 1825,
+        'PERPETUAL': -1
+    };
+
+    const priceMap = {
+        'TRIAL': 0,
+        '1_YEAR': 1000,
+        '2_YEARS': 1900,
+        '3_YEARS': 2800,
+        '4_YEARS': 3700,
+        '5_YEARS': 4500,
+        'PERPETUAL': 10000
+    };
+
+    const durationDays = durationMap[licenseType];
+    const price = priceMap[licenseType];
+
+    if (!confirm(`💰 Génération de licence\n\nType: ${licenseType}\nPrix: ${price} FCFA\nDurée: ${durationDays === -1 ? 'Perpétuelle' : durationDays + ' jours'}\nApplication: ${appType}\n\nContinuer ?`)) {
+        return;
+    }
+
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Génération...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/licenses/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                licenseType: licenseType,
+                durationDays: durationDays,
+                price: price,
+                appType: appType,
+                userId: userId,
+                userType: userType
+            })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            alert(`✅ Licence générée avec succès !\n\nClé: ${data.licenseKey}\nPrix: ${data.price} FCFA\nExpiration: ${data.endDate || 'Perpétuelle'}`);
+            await refreshLicensesList();
+            await loadLicenseStats();
+            document.getElementById('licenseType').value = '1_YEAR';
+            document.getElementById('licenseAppType').value = 'CLIENT';
+            document.getElementById('licenseUserId').value = '';
+        } else {
+            const error = await response.text();
+            alert('❌ Erreur: ' + error);
+        }
+    } catch (error) {
+        alert('Erreur: ' + error.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+async function refreshLicensesList() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/licenses/all`);
+        const licenses = await response.json();
+
+        const tbody = document.querySelector('#licensesTable tbody');
+        if (!tbody) return;
+
+        if (!licenses || !licenses.length) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center">Aucune licence<\/td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = licenses.map(license => {
+            let statusBadge = '';
+            let statusColor = '';
+
+            if (license.status === 'ACTIVE') {
+                statusBadge = '<span class="badge bg-success">🟢 Active</span>';
+                statusColor = 'success';
+            } else if (license.status === 'EXPIRED') {
+                statusBadge = '<span class="badge bg-danger">🔴 Expirée</span>';
+                statusColor = 'danger';
+            } else if (license.status === 'REVOKED') {
+                statusBadge = '<span class="badge bg-dark">⚫ Révoquée</span>';
+                statusColor = 'dark';
+            } else {
+                statusBadge = '<span class="badge bg-secondary">Inactive</span>';
+                statusColor = 'secondary';
+            }
+
+            const endDateDisplay = license.endDate ? new Date(license.endDate).toLocaleDateString() : (license.durationDays === -1 ? '♾️ Perpétuelle' : '-');
+
+            const typeLabels = {
+                'TRIAL': '🎁 Essai 7j',
+                '1_YEAR': '📅 1 an',
+                '2_YEARS': '📅 2 ans',
+                '3_YEARS': '📅 3 ans',
+                '4_YEARS': '📅 4 ans',
+                '5_YEARS': '📅 5 ans',
+                'PERPETUAL': '♾️ Perpétuelle'
+            };
+
+            const appLabels = {
+                'CLIENT': '👥 Client',
+                'DRIVER': '🚖 Chauffeur',
+                'BOTH': '🔄 Les deux'
+            };
+
+            return `
+                <tr class="license-${statusColor}">
+                    <td>${license.id}</td>
+                    <td><code style="background: #1a1a2e; padding: 4px 8px; border-radius: 6px;">${license.licenseKey}</code></td>
+                    <td>${typeLabels[license.licenseType] || license.licenseType}</td>
+                    <td>${appLabels[license.appType] || license.appType}</td>
+                    <td>${license.userName || license.userEmail || '-'}</td>
+                    <td>${new Date(license.createdAt).toLocaleDateString()}</td>
+                    <td>${endDateDisplay}</td>
+                    <td>${statusBadge}</td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="revokeLicense(${license.id})" title="Révoquer">
+                            <i class="fas fa-ban"></i>
+                        </button>
+                        <button class="btn btn-sm btn-info" onclick="copyLicenseKey('${license.licenseKey}')" title="Copier la clé">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('Erreur chargement licences:', error);
+        const tbody = document.querySelector('#licensesTable tbody');
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">Erreur: ${error.message}<\/td></tr>`;
+        }
+    }
+}
+
+async function loadLicenseStats() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/licenses/stats`);
+        const stats = await response.json();
+
+        const totalEl = document.getElementById('statTotalLicenses');
+        const activeEl = document.getElementById('statActiveLicenses');
+        const revenueEl = document.getElementById('statTotalRevenue');
+
+        if (totalEl) totalEl.textContent = stats.total || 0;
+        if (activeEl) activeEl.textContent = stats.active || 0;
+        if (revenueEl) revenueEl.textContent = (stats.totalRevenue || 0).toLocaleString() + ' FCFA';
+
+        const ctx = document.getElementById('licensesStatsChart');
+        if (ctx && stats.byType) {
+            if (licensesChart) licensesChart.destroy();
+
+            const labels = Object.keys(stats.byType);
+            const data = Object.values(stats.byType);
+            const typeColors = {
+                'TRIAL': '#FF9800',
+                '1_YEAR': '#2196F3',
+                '2_YEARS': '#9C27B0',
+                '3_YEARS': '#FF5722',
+                '4_YEARS': '#E91E63',
+                '5_YEARS': '#00BCD4',
+                'PERPETUAL': '#4CAF50'
+            };
+
+            licensesChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels.map(l => {
+                        const labelsMap = {
+                            'TRIAL': 'Essai 7j',
+                            '1_YEAR': '1 an',
+                            '2_YEARS': '2 ans',
+                            '3_YEARS': '3 ans',
+                            '4_YEARS': '4 ans',
+                            '5_YEARS': '5 ans',
+                            'PERPETUAL': 'Perpétuelle'
+                        };
+                        return labelsMap[l] || l;
+                    }),
+                    datasets: [{
+                        data: data,
+                        backgroundColor: labels.map(l => typeColors[l] || '#00E676'),
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Erreur stats licences:', error);
+    }
+}
+
+async function revokeLicense(licenseId) {
+    if (!confirm('⚠️ Révoquer cette licence ? L\'utilisateur perdra l\'accès immédiatement.')) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/licenses/revoke/${licenseId}`, {
+            method: 'PUT'
+        });
+
+        if (response.ok) {
+            alert('✅ Licence révoquée');
+            await refreshLicensesList();
+            await loadLicenseStats();
+        } else {
+            alert('❌ Erreur lors de la révocation');
+        }
+    } catch (error) {
+        alert('Erreur: ' + error.message);
+    }
+}
+
+function copyLicenseKey(key) {
+    navigator.clipboard.writeText(key);
+    alert('🔑 Clé copiée : ' + key);
+}
+
+// Exposer les fonctions globalement
+window.loadLicenses = loadLicenses;
+window.generateLicense = generateLicense;
+window.revokeLicense = revokeLicense;
+window.copyLicenseKey = copyLicenseKey;
+window.refreshLicensesList = refreshLicensesList;

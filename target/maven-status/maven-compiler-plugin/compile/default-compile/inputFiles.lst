@@ -9,6 +9,7 @@ C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\mo
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\model\Dispute.java
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\model\PaymentRequest.java
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\controller\LiveSharingController.java
+C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\repository\LicenseRepository.java
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\model\WalletTransaction.java
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\model\DriverAuthRequest.java
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\model\RegisterRequest.java
@@ -20,10 +21,13 @@ C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\co
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\controller\NotificationController.java
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\controller\CryptoPaymentController.java
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\controller\DisputeController.java
+C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\service\LicenseService.java
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\repository\RechargeCouponRepository.java
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\controller\DriverController.java
+C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\controller\LicenseController.java
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\service\MeSombPaymentService.java
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\model\Wallet.java
+C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\model\License.java
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\repository\TokenRepository.java
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\repository\UserRepository.java
 C:\Users\smhamza\IdeaProjects\abdil-taxi-backend\src\main\java\com\abdil\taxi\repository\WalletRepository.java

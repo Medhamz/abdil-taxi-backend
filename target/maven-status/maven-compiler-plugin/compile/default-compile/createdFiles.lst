@@ -2,6 +2,7 @@ com\abdil\taxi\controller\PaymentController.class
 com\abdil\taxi\config\FirebaseConfig.class
 com\abdil\taxi\controller\NotificationController.class
 com\abdil\taxi\controller\NoSecurityAuthController.class
+com\abdil\taxi\service\LicenseService.class
 com\abdil\taxi\controller\LiveSharingController$LiveShare.class
 com\abdil\taxi\controller\DriverController.class
 com\abdil\taxi\model\AuthResponse.class
@@ -24,6 +25,7 @@ com\abdil\taxi\AbdilTaxiBackendApplication.class
 com\abdil\taxi\repository\TokenRepository.class
 com\abdil\taxi\repository\WalletRepository.class
 com\abdil\taxi\controller\AuthController.class
+com\abdil\taxi\controller\LicenseController.class
 com\abdil\taxi\model\PaymentRequest.class
 com\abdil\taxi\model\WalletTransaction.class
 com\abdil\taxi\controller\AppVersionController.class
@@ -42,6 +44,7 @@ com\abdil\taxi\model\DriverAuthRequest.class
 com\abdil\taxi\repository\DriverRepository.class
 com\abdil\taxi\controller\AudioController.class
 com\abdil\taxi\model\RechargeCoupon.class
+com\abdil\taxi\repository\LicenseRepository.class
 com\abdil\taxi\model\Driver.class
 com\abdil\taxi\repository\RideRepository.class
 com\abdil\taxi\model\RideRequest.class
@@ -60,6 +63,7 @@ com\abdil\taxi\model\User.class
 com\abdil\taxi\controller\AdminController.class
 com\abdil\taxi\model\ScheduledRide.class
 com\abdil\taxi\controller\ReviewController.class
+com\abdil\taxi\model\License.class
 com\abdil\taxi\service\MeSombPaymentService.class
 com\abdil\taxi\controller\LiveSharingController.class
 com\abdil\taxi\controller\DisputeController.class
