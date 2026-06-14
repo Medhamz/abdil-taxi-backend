@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 import java.io.IOException;
-import java.nio.file.Files;
+import java.io.InputStream;
 
 @Controller
 public class StaticResourceController {
@@ -22,31 +22,52 @@ public class StaticResourceController {
 
     @GetMapping(value = "/admin/css/{filename}", produces = "text/css")
     @ResponseBody
-    public ResponseEntity<byte[]> getCss(@PathVariable String filename) throws IOException {
-        Resource resource = new ClassPathResource("static/admin/css/" + filename);
-        byte[] content = Files.readAllBytes(resource.getFile().toPath());
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("text/css"))
-                .body(content);
+    public ResponseEntity<byte[]> getCss(@PathVariable String filename) {
+        try {
+            Resource resource = new ClassPathResource("static/admin/css/" + filename);
+            try (InputStream is = resource.getInputStream()) {
+                byte[] content = is.readAllBytes();
+                return ResponseEntity.ok()
+                        .contentType(MediaType.parseMediaType("text/css"))
+                        .body(content);
+            }
+        } catch (IOException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @GetMapping(value = "/admin/js/{filename}", produces = "application/javascript")
     @ResponseBody
-    public ResponseEntity<byte[]> getJs(@PathVariable String filename) throws IOException {
-        Resource resource = new ClassPathResource("static/admin/js/" + filename);
-        byte[] content = Files.readAllBytes(resource.getFile().toPath());
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("application/javascript"))
-                .body(content);
+    public ResponseEntity<byte[]> getJs(@PathVariable String filename) {
+        try {
+            Resource resource = new ClassPathResource("static/admin/js/" + filename);
+            try (InputStream is = resource.getInputStream()) {
+                byte[] content = is.readAllBytes();
+                return ResponseEntity.ok()
+                        .contentType(MediaType.parseMediaType("application/javascript"))
+                        .body(content);
+            }
+        } catch (IOException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
-    @GetMapping(value = "/admin/{filename}")
+    @GetMapping(value = "/admin/{filename:.+}")
     @ResponseBody
-    public ResponseEntity<byte[]> getHtml(@PathVariable String filename) throws IOException {
-        Resource resource = new ClassPathResource("static/admin/" + filename);
-        byte[] content = Files.readAllBytes(resource.getFile().toPath());
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("text/html"))
-                .body(content);
+    public ResponseEntity<byte[]> getHtml(@PathVariable String filename) {
+        try {
+            Resource resource = new ClassPathResource("static/admin/" + filename);
+            try (InputStream is = resource.getInputStream()) {
+                byte[] content = is.readAllBytes();
+                String contentType = "text/html";
+                if (filename.endsWith(".css")) contentType = "text/css";
+                if (filename.endsWith(".js")) contentType = "application/javascript";
+                return ResponseEntity.ok()
+                        .contentType(MediaType.parseMediaType(contentType))
+                        .body(content);
+            }
+        } catch (IOException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 }
