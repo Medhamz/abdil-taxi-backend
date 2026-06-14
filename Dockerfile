@@ -3,28 +3,41 @@ FROM maven:3.9-eclipse-temurin-17 AS build
 
 WORKDIR /app
 
+<<<<<<< HEAD
 # Copier et télécharger les dépendances (cache Docker)
 COPY pom.xml .
 RUN mvn dependency:go-offline -B
 
 # Copier le code source et construire l'application
+=======
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+
+>>>>>>> ba9e644b8afdcc2fdb79aa066dabcb64a357037b
 COPY src ./src
 RUN mvn clean package -DskipTests
 
 # Étape 2 : Image finale
 FROM eclipse-temurin:17-jdk-alpine
 
+<<<<<<< HEAD
 # Installer curl pour les health checks
+=======
+>>>>>>> ba9e644b8afdcc2fdb79aa066dabcb64a357037b
 RUN apk add --no-cache curl
 
 WORKDIR /app
 
+<<<<<<< HEAD
 # Copier le JAR depuis l'étape de build
+=======
+>>>>>>> ba9e644b8afdcc2fdb79aa066dabcb64a357037b
 COPY --from=build /app/target/abdil-taxi-backend.jar app.jar
 
-# Créer les répertoires pour les uploads
 RUN mkdir -p /app/uploads/audio /app/uploads/images
+RUN mkdir -p /app/firebase
 
+<<<<<<< HEAD
 # Exposer le port (Render utilisera la variable PORT)
 EXPOSE 8080
 
@@ -33,6 +46,21 @@ COPY --chmod=755 <<-"EOF" /app/entrypoint.sh
 #!/bin/sh
 
 # Créer le fichier de configuration de production
+=======
+EXPOSE 8080
+
+COPY --chmod=755 <<-"EOF" /app/entrypoint.sh
+#!/bin/sh
+
+# Créer le fichier Firebase à partir de la variable d'environnement
+if [ ! -z "$FIREBASE_CONFIG" ]; then
+    echo "$FIREBASE_CONFIG" > /app/firebase/serviceAccountKey.json
+    echo "✅ Firebase config file created from environment variable"
+else
+    echo "⚠️ Warning: FIREBASE_CONFIG environment variable is not set"
+fi
+
+>>>>>>> ba9e644b8afdcc2fdb79aa066dabcb64a357037b
 cat > /app/application-production.properties <<-EOL
 server.port=\${PORT:8080}
 server.address=0.0.0.0
@@ -53,6 +81,11 @@ logging.level.org.springframework.web=WARN
 jwt.secret=\${JWT_SECRET:abdilTaxiSecretKey2024ForJWTTokenGenerationAndValidation}
 jwt.expiration=86400000
 
+<<<<<<< HEAD
+=======
+firebase.config.path=/app/firebase/serviceAccountKey.json
+
+>>>>>>> ba9e644b8afdcc2fdb79aa066dabcb64a357037b
 audio.upload.dir=/app/uploads/audio
 spring.servlet.multipart.max-file-size=10MB
 spring.servlet.multipart.max-request-size=10MB
@@ -68,7 +101,10 @@ mesomb.currency=XOF
 mesomb.language=fr
 EOL
 
+<<<<<<< HEAD
 # Lancer l'application avec le profil 'production'
+=======
+>>>>>>> ba9e644b8afdcc2fdb79aa066dabcb64a357037b
 exec java -jar -Dspring.profiles.active=production app.jar
 EOF
 
