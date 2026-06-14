@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: abdil-taxi-backend
+    runtime: image
+    repo: https://github.com/Medhamz/abdil-taxi-backend
+    plan: free
+    envVars:
+      - key: DB_URL
+        value: mysql://user:password@host:port/abdiltaxi
+      - key: DB_USERNAME
+        value: votre_username
+      - key: DB_PASSWORD
+        value: votre_password
+      - key: JWT_SECRET
+        generateValue: true

@@ -1760,11 +1760,11 @@ async function loadLicenses() {
             <div class="col-md-12">
                 <div class="card mb-4">
                     <div class="card-header bg-primary text-white">
-                        <i class="fas fa-key"></i> Générer une licence
+                        <i class="fas fa-key"></i> Générer une licence chauffeur
                     </div>
                     <div class="card-body">
                         <div class="row">
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <label class="form-label">Type de licence</label>
                                 <select class="form-select" id="licenseType">
                                     <option value="TRIAL">🎁 Essai (7 jours - Gratuit)</option>
@@ -1776,24 +1776,23 @@ async function loadLicenses() {
                                     <option value="PERPETUAL">♾️ Perpétuelle - 10000 FCFA</option>
                                 </select>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <label class="form-label">Application</label>
                                 <select class="form-select" id="licenseAppType">
-                                    <option value="CLIENT">👥 Client</option>
                                     <option value="DRIVER">🚖 Chauffeur</option>
-                                    <option value="BOTH">🔄 Les deux</option>
                                 </select>
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Client (optionnel)</label>
+                            <div class="col-md-4">
+                                <label class="form-label">Chauffeur (optionnel)</label>
                                 <select class="form-select" id="licenseUserId">
                                     <option value="">-- Aucun (licence non attribuée) --</option>
                                 </select>
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label">&nbsp;</label>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-12">
                                 <button class="btn btn-success w-100" onclick="generateLicense()">
-                                    <i class="fas fa-plus-circle"></i> Générer la licence
+                                    <i class="fas fa-plus-circle"></i> Générer la licence chauffeur
                                 </button>
                             </div>
                         </div>
@@ -1806,7 +1805,7 @@ async function loadLicenses() {
             <div class="col-md-12">
                 <div class="card">
                     <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-list"></i> Liste des licences</span>
+                        <span><i class="fas fa-list"></i> Liste des licences chauffeurs</span>
                         <button class="btn btn-sm btn-light" onclick="refreshLicensesList()">
                             <i class="fas fa-sync-alt"></i> Rafraîchir
                         </button>
@@ -1819,7 +1818,7 @@ async function loadLicenses() {
                                         <th>ID</th>
                                         <th>Clé</th>
                                         <th>Type</th>
-                                        <th>App</th>
+                                        <th>Application</th>
                                         <th>Utilisateur</th>
                                         <th>Créée le</th>
                                         <th>Expiration</th>
@@ -1827,8 +1826,8 @@ async function loadLicenses() {
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                    <tr><td colspan="9" class="text-center">Chargement...</td></tr>
+                                <tbody id="licensesTableBody">
+                                    <tr><td colspan="9" class="text-center">Chargement des licences...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -1888,12 +1887,8 @@ async function loadLicenses() {
 
 async function loadUsersForSelect() {
     try {
-        const [clientsRes, driversRes] = await Promise.all([
-            fetch(`${API_BASE_URL}/clients`),
-            fetch(`${API_BASE_URL}/drivers`)
-        ]);
-
-        const clients = await clientsRes.json();
+        // ✅ Ne charger que les chauffeurs (pas les clients)
+        const driversRes = await fetch(`${API_BASE_URL}/drivers`);
         const drivers = await driversRes.json();
 
         const select = document.getElementById('licenseUserId');
@@ -1901,41 +1896,26 @@ async function loadUsersForSelect() {
 
         select.innerHTML = '<option value="">-- Aucun (licence non attribuée) --</option>';
 
-        if (clients && clients.length) {
-            const optgroupClients = document.createElement('optgroup');
-            optgroupClients.label = '👥 Clients';
-            clients.forEach(c => {
-                const option = document.createElement('option');
-                option.value = `CLIENT_${c.id}`;
-                option.textContent = `${c.fullName || c.email || 'Client'} (ID: ${c.id})`;
-                optgroupClients.appendChild(option);
-            });
-            select.appendChild(optgroupClients);
-        }
-
         if (drivers && drivers.length) {
-            const optgroupDrivers = document.createElement('optgroup');
-            optgroupDrivers.label = '🚖 Chauffeurs';
             drivers.forEach(d => {
                 const option = document.createElement('option');
                 option.value = `DRIVER_${d.id}`;
                 option.textContent = `${d.fullName || d.email || 'Chauffeur'} (ID: ${d.id})`;
-                optgroupDrivers.appendChild(option);
+                select.appendChild(option);
             });
-            select.appendChild(optgroupDrivers);
         }
     } catch (error) {
-        console.error('Erreur chargement utilisateurs:', error);
+        console.error('Erreur chargement chauffeurs:', error);
     }
 }
 
 async function generateLicense() {
     const licenseType = document.getElementById('licenseType').value;
-    const appType = document.getElementById('licenseAppType').value;
+    const appType = "DRIVER"; // ✅ Forcé à DRIVER
     const userIdRaw = document.getElementById('licenseUserId').value;
 
     let userId = null;
-    let userType = null;
+    let userType = "DRIVER";
 
     if (userIdRaw) {
         const parts = userIdRaw.split('_');
@@ -1966,7 +1946,7 @@ async function generateLicense() {
     const durationDays = durationMap[licenseType];
     const price = priceMap[licenseType];
 
-    if (!confirm(`💰 Génération de licence\n\nType: ${licenseType}\nPrix: ${price} FCFA\nDurée: ${durationDays === -1 ? 'Perpétuelle' : durationDays + ' jours'}\nApplication: ${appType}\n\nContinuer ?`)) {
+    if (!confirm(`💰 Génération de licence chauffeur\n\nType: ${licenseType}\nPrix: ${price} FCFA\nDurée: ${durationDays === -1 ? 'Perpétuelle' : durationDays + ' jours'}\n\nContinuer ?`)) {
         return;
     }
 
@@ -1991,11 +1971,10 @@ async function generateLicense() {
 
         if (response.ok) {
             const data = await response.json();
-            alert(`✅ Licence générée avec succès !\n\nClé: ${data.licenseKey}\nPrix: ${data.price} FCFA\nExpiration: ${data.endDate || 'Perpétuelle'}`);
+            alert(`✅ Licence chauffeur générée avec succès !\n\nClé: ${data.licenseKey}\nPrix: ${data.price} FCFA\nExpiration: ${data.endDate || 'Perpétuelle'}`);
             await refreshLicensesList();
             await loadLicenseStats();
             document.getElementById('licenseType').value = '1_YEAR';
-            document.getElementById('licenseAppType').value = 'CLIENT';
             document.getElementById('licenseUserId').value = '';
         } else {
             const error = await response.text();
@@ -2014,11 +1993,14 @@ async function refreshLicensesList() {
         const response = await fetch(`${API_BASE_URL}/licenses/all`);
         const licenses = await response.json();
 
-        const tbody = document.querySelector('#licensesTable tbody');
-        if (!tbody) return;
+        const tbody = document.getElementById('licensesTableBody');
+        if (!tbody) {
+            console.error('Table body not found');
+            return;
+        }
 
         if (!licenses || !licenses.length) {
-            tbody.innerHTML = '<tr><td colspan="9" class="text-center">Aucune licence<\/td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center">Aucune licence trouvée</td></tr>';
             return;
         }
 
@@ -2052,19 +2034,16 @@ async function refreshLicensesList() {
                 'PERPETUAL': '♾️ Perpétuelle'
             };
 
-            const appLabels = {
-                'CLIENT': '👥 Client',
-                'DRIVER': '🚖 Chauffeur',
-                'BOTH': '🔄 Les deux'
-            };
+            // ✅ Afficher correctement le nom du chauffeur
+            const userName = license.userName || license.userEmail || '-';
 
             return `
                 <tr class="license-${statusColor}">
                     <td>${license.id}</td>
-                    <td><code style="background: #1a1a2e; padding: 4px 8px; border-radius: 6px;">${license.licenseKey}</code></td>
+                    <td><code style="background: #1a1a2e; padding: 4px 8px; border-radius: 6px; color: #00e676;">${license.licenseKey}</code></td>
                     <td>${typeLabels[license.licenseType] || license.licenseType}</td>
-                    <td>${appLabels[license.appType] || license.appType}</td>
-                    <td>${license.userName || license.userEmail || '-'}</td>
+                    <td>🚖 Chauffeur</td>
+                    <td>${userName}</td>
                     <td>${new Date(license.createdAt).toLocaleDateString()}</td>
                     <td>${endDateDisplay}</td>
                     <td>${statusBadge}</td>
@@ -2082,9 +2061,9 @@ async function refreshLicensesList() {
 
     } catch (error) {
         console.error('Erreur chargement licences:', error);
-        const tbody = document.querySelector('#licensesTable tbody');
+        const tbody = document.getElementById('licensesTableBody');
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">Erreur: ${error.message}<\/td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">Erreur: ${error.message}</td></tr>`;
         }
     }
 }

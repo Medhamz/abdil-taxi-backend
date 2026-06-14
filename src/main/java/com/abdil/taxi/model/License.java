@@ -23,7 +23,7 @@ public class License {
     private Integer price;
 
     @Column(nullable = false, length = 20)
-    private String appType; // CLIENT, DRIVER, BOTH
+    private String appType = "DRIVER"; // ✅ Valeur par défaut DRIVER
 
     private Long userId;
 

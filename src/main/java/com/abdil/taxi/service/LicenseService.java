@@ -1,9 +1,9 @@
 package com.abdil.taxi.service;
 
 import com.abdil.taxi.model.License;
-import com.abdil.taxi.model.User;
+import com.abdil.taxi.model.Driver;
 import com.abdil.taxi.repository.LicenseRepository;
-import com.abdil.taxi.repository.UserRepository;
+import com.abdil.taxi.repository.DriverRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,13 +19,10 @@ public class LicenseService {
     private LicenseRepository licenseRepository;
 
     @Autowired
-    private UserRepository userRepository;
+    private DriverRepository driverRepository;  // ✅ CHANGÉ: DriverRepository au lieu de UserRepository
 
     private static final String LICENSE_PREFIX = "ABDIL";
 
-    /**
-     * Génère une clé de licence unique
-     */
     private String generateUniqueLicenseKey() {
         String characters = "ABCDEFGHJKLMNPQRSTUVWXYZ0123456789";
         Random random = new Random();
@@ -44,65 +41,73 @@ public class LicenseService {
         return key;
     }
 
-    /**
-     * Calcule la date de fin en fonction de la durée
-     */
     private LocalDateTime calculateEndDate(Integer durationDays) {
-        if (durationDays == -1) return null; // Perpétuelle
+        if (durationDays == -1) return null;
         return LocalDateTime.now().plusDays(durationDays);
     }
 
-    /**
-     * Récupère les infos utilisateur si userId est fourni
-     */
-    private void enrichUserInfo(License license) {
+    // ✅ CORRIGÉ: Utilise DriverRepository
+    private void enrichDriverInfo(License license) {
         if (license.getUserId() != null) {
-            Optional<User> userOpt = userRepository.findById(license.getUserId());
-            if (userOpt.isPresent()) {
-                User user = userOpt.get();
-                license.setUserName(user.getFullName());
-                license.setUserEmail(user.getEmail());
-                // Déterminer le type d'utilisateur (CLIENT ou DRIVER)
+            Optional<Driver> driverOpt = driverRepository.findById(license.getUserId());
+            if (driverOpt.isPresent()) {
+                Driver driver = driverOpt.get();
+                license.setUserName(driver.getFullName());
+                license.setUserEmail(driver.getEmail());
+                System.out.println("📝 enrichDriverInfo: " + driver.getFullName() + " pour licence " + license.getLicenseKey());
                 if (license.getUserType() == null) {
-                    if (user.getRole() != null) {
-                        if (user.getRole().contains("DRIVER") || user.getRole().equalsIgnoreCase("DRIVER")) {
-                            license.setUserType("DRIVER");
-                        } else {
-                            license.setUserType("CLIENT");
-                        }
-                    }
+                    license.setUserType("DRIVER");
                 }
             }
         }
     }
 
-    /**
-     * Génère une nouvelle licence
-     */
     @Transactional
     public License generateLicense(String licenseType, Integer durationDays, Integer price,
                                    String appType, Long userId, String userType, String createdBy) {
+
+        // ✅ Forcer l'application à DRIVER
+        if (appType == null || (!"DRIVER".equals(appType) && !"BOTH".equals(appType))) {
+            appType = "DRIVER";
+        }
+
+        // ✅ Vérifier si le chauffeur a déjà une licence active
+        if (userId != null) {
+            Optional<License> existingLicense = licenseRepository.findByUserIdAndAppTypeAndStatus(userId, appType, "ACTIVE");
+            if (existingLicense.isPresent()) {
+                throw new RuntimeException("Ce chauffeur a déjà une licence active");
+            }
+        }
+
         String licenseKey = generateUniqueLicenseKey();
         LocalDateTime startDate = LocalDateTime.now();
         LocalDateTime endDate = calculateEndDate(durationDays);
 
         License license = new License(
                 licenseKey, licenseType, durationDays, price, appType,
-                userId, userType, null, null,
+                userId, "DRIVER", null, null,
                 "ACTIVE", startDate, endDate,
                 createdBy != null ? createdBy : "ADMIN"
         );
 
-        enrichUserInfo(license);
+        enrichDriverInfo(license);
 
         return licenseRepository.save(license);
     }
 
-    /**
-     * Récupère toutes les licences
-     */
     public List<License> getAllLicenses() {
         List<License> licenses = licenseRepository.findAll();
+
+        // ✅ Mettre à jour les noms manquants avant d'afficher
+        for (License license : licenses) {
+            if (license.getUserId() != null && (license.getUserName() == null || license.getUserName().isEmpty())) {
+                enrichDriverInfo(license);
+                if (license.getUserName() != null) {
+                    licenseRepository.save(license);
+                }
+            }
+        }
+
         licenses.sort((a, b) -> {
             if (a.getCreatedAt() == null || b.getCreatedAt() == null) return 0;
             return b.getCreatedAt().compareTo(a.getCreatedAt());
@@ -110,9 +115,7 @@ public class LicenseService {
         return licenses;
     }
 
-    /**
-     * Vérifie la validité d'une licence
-     */
+    @Transactional
     public Map<String, Object> verifyLicense(String licenseKey, String appType, Long userId) {
         Map<String, Object> result = new HashMap<>();
 
@@ -126,21 +129,28 @@ public class LicenseService {
 
         License license = licenseOpt.get();
 
-        // Vérifier le type d'application
+        // ✅ Vérifier si la licence est déjà utilisée par un autre chauffeur
+        if (license.getUserId() != null && userId != null && !license.getUserId().equals(userId)) {
+            result.put("valid", false);
+            result.put("message", "❌ Cette licence est déjà utilisée par un autre compte");
+            return result;
+        }
+
+        // ✅ Vérifier le type d'application
         if (!"BOTH".equals(license.getAppType()) && !license.getAppType().equals(appType)) {
             result.put("valid", false);
             result.put("message", "❌ Cette licence n'est pas valide pour cette application");
             return result;
         }
 
-        // Vérifier le statut
+        // ✅ Vérifier le statut
         if ("REVOKED".equals(license.getStatus())) {
             result.put("valid", false);
             result.put("message", "❌ Licence révoquée");
             return result;
         }
 
-        // Vérifier l'expiration (sauf pour perpétuelle)
+        // ✅ Vérifier l'expiration
         if (license.getDurationDays() != -1 && license.getEndDate() != null &&
                 license.getEndDate().isBefore(LocalDateTime.now())) {
             license.setStatus("EXPIRED");
@@ -150,19 +160,43 @@ public class LicenseService {
             return result;
         }
 
-        // Si userId est fourni et licence non attribuée, l'attribuer
-        if (userId != null && license.getUserId() == null) {
-            license.setUserId(userId);
-            license.setUserType(appType);
-            enrichUserInfo(license);
-            licenseRepository.save(license);
-        }
+        // ✅ Si la licence n'est pas encore attribuée, l'attribuer à ce chauffeur
+        if (license.getUserId() == null && userId != null) {
+            // ✅ Vérifier si le chauffeur n'a pas déjà une autre licence active
+            Optional<License> userActiveLicense = licenseRepository.findByUserIdAndAppTypeAndStatus(userId, appType, "ACTIVE");
+            if (userActiveLicense.isPresent() && !userActiveLicense.get().getId().equals(license.getId())) {
+                result.put("valid", false);
+                result.put("message", "❌ Vous avez déjà une licence active. Une seule licence par compte est autorisée.");
+                return result;
+            }
 
-        // Si userId est fourni mais différent, vérifier que c'est le même utilisateur
-        if (userId != null && license.getUserId() != null && !license.getUserId().equals(userId)) {
-            result.put("valid", false);
-            result.put("message", "❌ Cette licence est déjà utilisée par un autre compte");
-            return result;
+            license.setUserId(userId);
+            license.setUserType("DRIVER");
+
+            // ✅ Récupérer les informations complètes du chauffeur
+            Optional<Driver> driverOpt = driverRepository.findById(userId);
+            if (driverOpt.isPresent()) {
+                Driver driver = driverOpt.get();
+                license.setUserName(driver.getFullName());
+                license.setUserEmail(driver.getEmail());
+                license.setUserType("DRIVER");
+
+                System.out.println("✅ Licence attribuée au chauffeur: " + driver.getFullName() + " (" + driver.getEmail() + ")");
+            } else {
+                System.out.println("⚠️ Avertissement: Chauffeur non trouvé avec ID: " + userId);
+            }
+
+            licenseRepository.save(license);
+        } else if (license.getUserId() != null && (license.getUserName() == null || license.getUserName().isEmpty()) && userId != null) {
+            // ✅ Cas où la licence est déjà attribuée mais le nom n'a pas été sauvegardé
+            Optional<Driver> driverOpt = driverRepository.findById(license.getUserId());
+            if (driverOpt.isPresent()) {
+                Driver driver = driverOpt.get();
+                license.setUserName(driver.getFullName());
+                license.setUserEmail(driver.getEmail());
+                licenseRepository.save(license);
+                System.out.println("✅ Mise à jour du nom pour la licence: " + driver.getFullName());
+            }
         }
 
         result.put("valid", true);
@@ -173,13 +207,12 @@ public class LicenseService {
         result.put("price", license.getPrice());
         result.put("endDate", license.getEndDate());
         result.put("isPerpetual", license.getDurationDays() == -1);
+        result.put("userName", license.getUserName());
+        result.put("userEmail", license.getUserEmail());
 
         return result;
     }
 
-    /**
-     * Révoque une licence
-     */
     @Transactional
     public License revokeLicense(Long licenseId) {
         License license = licenseRepository.findById(licenseId)
@@ -189,28 +222,34 @@ public class LicenseService {
         return licenseRepository.save(license);
     }
 
-    /**
-     * Active une licence (pour réactivation)
-     */
     @Transactional
     public License activateLicense(Long licenseId) {
         License license = licenseRepository.findById(licenseId)
                 .orElseThrow(() -> new RuntimeException("Licence non trouvée"));
 
+        // ✅ Vérifier si le chauffeur n'a pas déjà une autre licence active
+        if (license.getUserId() != null) {
+            Optional<License> existingLicense = licenseRepository.findByUserIdAndAppTypeAndStatus(
+                    license.getUserId(), license.getAppType(), "ACTIVE");
+            if (existingLicense.isPresent() && !existingLicense.get().getId().equals(licenseId)) {
+                throw new RuntimeException("Ce chauffeur a déjà une licence active");
+            }
+        }
+
         if ("EXPIRED".equals(license.getStatus())) {
-            // Réactiver avec nouvelle date d'expiration
             LocalDateTime newEndDate = calculateEndDate(license.getDurationDays());
             license.setEndDate(newEndDate);
         }
 
         license.setStatus("ACTIVE");
         license.setUpdatedAt(LocalDateTime.now());
+
+        // ✅ Mettre à jour les infos du chauffeur si besoin
+        enrichDriverInfo(license);
+
         return licenseRepository.save(license);
     }
 
-    /**
-     * Met à jour les licences expirées
-     */
     @Transactional
     public int updateExpiredLicenses() {
         List<License> expiredLicenses = licenseRepository.findExpiredActiveLicenses(LocalDateTime.now());
@@ -222,9 +261,6 @@ public class LicenseService {
         return expiredLicenses.size();
     }
 
-    /**
-     * Récupère les statistiques des licences
-     */
     public Map<String, Object> getLicenseStats() {
         Map<String, Object> stats = new HashMap<>();
 
@@ -234,7 +270,6 @@ public class LicenseService {
         Long totalRevenue = licenseRepository.sumTotalRevenue();
         stats.put("totalRevenue", totalRevenue != null ? totalRevenue : 0L);
 
-        // Statistiques par type
         List<Object[]> byType = licenseRepository.countByLicenseType();
         Map<String, Long> byTypeMap = new HashMap<>();
         for (Object[] row : byType) {
@@ -245,16 +280,10 @@ public class LicenseService {
         return stats;
     }
 
-    /**
-     * Récupère la licence d'un utilisateur
-     */
     public Optional<License> getUserActiveLicense(Long userId, String appType) {
         return licenseRepository.findByUserIdAndAppTypeAndStatus(userId, appType, "ACTIVE");
     }
 
-    /**
-     * Récupère les licences d'un utilisateur
-     */
     public List<License> getUserLicenses(Long userId, String appType) {
         return licenseRepository.findByUserIdAndAppType(userId, appType);
     }
