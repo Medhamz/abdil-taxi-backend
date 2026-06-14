@@ -1,7 +1,7 @@
 // Configuration
-const API_BASE_URL = 'http://localhost:8080/api/admin';
-const API_BASE_URL_TAXI = 'http://localhost:8080/api/taxi';
-const API_NOTIFICATIONS_URL = 'http://localhost:8080/api/notifications';
+const API_BASE_URL = 'https://abdil-taxi-backend.onrender.com/api/admin';
+const API_BASE_URL_TAXI = 'https://abdil-taxi-backend.onrender.com/api/taxi';
+const API_NOTIFICATIONS_URL = 'https://abdil-taxi-backend.onrender.com/api/notifications';
 
 // Initialisation
 document.addEventListener('DOMContentLoaded', function() {

@@ -185,7 +185,8 @@
     let map;
     let markers = [];
     let gpsRefreshInterval;
-    const API_BASE_URL = 'http://192.168.11.101:8080/api/admin';
+    // ✅ URL du backend déployé sur Render
+    const API_BASE_URL = 'https://abdil-taxi-backend.onrender.com/api/admin';
 
     function toggleSidebar() {
         document.getElementById('sidebar').classList.toggle('active');
@@ -214,7 +215,7 @@
                 'disputes': 'LITIGES',
                 'gps': 'SUIVI GPS',
                 'advertising': 'TAXI PUB',
-                'licenses': 'LICENCES'   // ✅ AJOUTÉ
+                'licenses': 'LICENCES'
             };
             document.getElementById('pageTitle').textContent = titles[page] || page.toUpperCase();
 
