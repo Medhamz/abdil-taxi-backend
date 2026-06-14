@@ -1,13 +1,13 @@
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jdk-alpine
 
 # Installer curl pour les health checks
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache curl
 
 # Créer le répertoire de travail
 WORKDIR /app
 
-# Copier le fichier JAR généré par Maven (dans target/)
-COPY target/*.jar app.jar
+# Copier le fichier JAR
+COPY target/abdil-taxi-backend.jar app.jar
 
 # Créer les répertoires pour les uploads
 RUN mkdir -p /app/uploads/audio /app/uploads/images
